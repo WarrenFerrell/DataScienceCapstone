@@ -1,0 +1,152 @@
+---
+title: "Capstone Milestone Report"
+author: "Warren T Ferrell Jewell"
+date: "November 16, 2016"
+output: html_document
+---
+
+## About the Data
+Data is provided by blah blah blah.
+Twitter is 159 MB with 2360148 lines
+Blogs is   200 MB with 899288 lines
+News is    196 MB with 77259 lines
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tm); library(ggplot2); library(dplyr)
+dataPath <- "data/en_US/"
+twitDir =  paste0(dataPath, "twitter/")
+blogDir = paste0(dataPath, "blogs/")
+newsDir = paste0(dataPath, "news/")
+twitFile = paste0(twitDir, "en_US.twitter.txt")
+blogFile = paste0(blogDir, "en_US.blogs.txt")
+newsFile = paste0(newsDir, "en_US.news.txt")
+twitLines = 2360148
+blogLines = 899288
+newsLines = 77259
+twitChars = 162384825
+blogChars = 370746263
+newsChars = 386430028
+twitSize = 159
+blogSize = 200
+newsSize = 196
+readPartial <- function(filePath, NChars, xChars = NChars ) {
+    fileCon <- file(filePath, "rt")
+    partial <- list()
+    p = xChars / NChars #probability that a line should be grabbed
+    nGrabbed = 1
+    while(length(line <- readLines(fileCon, n = 1L, warn=FALSE)) > 0) {
+        if( runif(1) < p ) {
+            partial <- c(partial, line) 
+            nGrabbed = nGrabbed + 1
+        }
+    }
+    close(fileCon)
+    partialCorpus <- tm::VCorpus(VectorSource(partial),
+        readerControl = list(reader = readPlain, language = "en_US"))
+    meta(partialCorpus, tag = "file") <- basename(filePath)
+    source <- gsub(filePath, pattern = paste0(dataPath,"([[:alpha:]]+)/.*"), replace = "\\1")
+    meta(partialCorpus, tag = "source") <- source
+    print(paste("Grabbed", nGrabbed, "lines from", source))
+    return(partialCorpus)
+}
+```
+
+
+```{r loadingSubsetData, cache=TRUE}
+set.seed(4684)
+xChars = 1E6 # work with about 1 MBs of data from each set
+twit <- readPartial(twitFile, twitChars , xChars)  
+blog <- readPartial(blogFile, blogChars , xChars)
+news <- readPartial(newsFile, newsChars , xChars)
+data.Corpora <- list(twit=twit,blog=blog, news=news)
+rm(list = ls(pattern = "(^[^\\.]+)$")) #remove all objects without a period
+
+```
+
+## Cleaning Data
+Generate a document term matrix from each corpus, numbers, whitespace, and 
+changing letters to all lower case. Punctuation and stopwords are left in because
+they could heavily affect text prediction.
+
+```{r clningData, cache=TRUE}
+transformations <- list(tolower = T ,removeNumbers = T, 
+                        stripWhitespace = T, removePunctuation = T)
+data.DTM <- lapply(data.Corpora, function(x)
+    tm::DocumentTermMatrix(x, control = transformations) )
+lapply(data.DTM, function(x) x )
+data.termFreq <- lapply(data.DTM, function(x) colSums(as.matrix(x)) )
+lapply(data.termFreq, function(x) head(table(x), 5))
+```
+
+We see that each corpus has thousands of terms and each term is extremely sparse.
+Interestingly, news posts have the best convergence with only 2826 terms and 
+sparsity less than approximately 100%. This is due largely to a large number of 
+terms that only occur a few number of times - e.g. 11960 terms only appear once 
+in the twitter corpora. To fix this we recreate the DTM and grab only terms that. 
+
+```{r sparseTerms}
+data.DTM.cln <- lapply(data.DTM, function(x) tm::removeSparseTerms(x, 0.99))
+for (i in seq_along(data.DTM.cln)) {    # no easy pass by reference in R
+    data.DTM.cln[[i]]$termFreq <- colSums(as.matrix(data.DTM.cln[[i]]))     
+    data.DTM.cln[[i]]$minFreq <- table(data.DTM.cln[[i]]$termFreq)[[1]] - 1
+    data.DTM.cln[[i]]$infreqTerms <- findFreqTerms(data.DTM[[i]], 0, data.DTM.cln[[i]]$minFreq) 
+}
+lapply(data.DTM.cln, function(x) x )
+lapply(data.DTM.cln, function(x) head(table(x$termFreq), 5))
+
+```
+
+This gets us down to a maximum term count of 360 which is a 
+managable 47 million searchspace for a 3-gram prediction algorithm.
+
+## Exploring Data Terms
+
+```{r terms, echo=FALSE}
+ord <- lapply(data.DTM.cln, function(x) order(x$termFreq, decreasing = TRUE))
+topTerms <- data.frame(t(mapply( function(data, ord) head(data$termFreq[ord], n=10L),
+                                 data.DTM.cln, ord)))
+topTerms["source"] <- row.names(topTerms)
+topTerms.melted <- reshape::melt.data.frame( topTerms, id.vars = "source", value_name = "freq", variable_name = "term")
+ggplot2::ggplot(topTerms.melted, aes(x = term, y = value, fill = source)) + 
+    geom_bar( position = "dodge", stat = "identity", alpha = .3 ) +
+    ylab("frequency")
+botTerms <- data.frame(t(mapply( function(data, ord) tail(data$termFreq[ord], n=10L),
+                                 data.DTM.cln, ord)))
+botTerms["source"] <- row.names(botTerms)
+botTerms.melted <- reshape::melt.data.frame( botTerms, id.vars = "source", value_name = "freq", variable_name = "term")
+ggplot2::ggplot(botTerms.melted, aes(x = term, y = value, fill = source)) + 
+    geom_bar( position = "dodge", stat = "identity", alpha = .3 ) +
+    ylab("frequency")
+
+```
+
+## N-grems
+```{r nGrams, cache=TRUE}
+data.CleanCorpora <- list()
+for (i in seq_along(data.DTM.cln)) {    # no easy pass by reference in R
+    skipWords <- function(x) removeWords(x, data.DTM.cln$infreqTerms) 
+    transformations <- list( removeNumbers, stripWhitespace, skipWords,
+                         content_transformer(tolower))
+    data.CleanCorpora[[i]] <- tm_map(data.Corpora[[i]], FUN = tm_reduce,
+                                     tmFuns = transformations)
+}
+
+ngram_tokenizer <- function(s) ngrams(strsplit(as.String(s), " ", fixed = TRUE)[[1]], 3L)
+ngram_tokenizer <- Token_Tokenizer(ngram_tokenizer)
+cntrl <- list(tokenizer = ngram_tokenizer, global = list(c(2,Inf)))
+data.DGM <- lapply(data.CleanCorpora, function(x)tm::DocumentTermMatrix(x, cntrl))
+data.DGM <- lapply(data.DTM, function(x) tm::removeSparseTerms(x, 0.99))
+data.gramFreq <- lapply(data.DGM, function(x) colSums(as.matrix(x)))     
+lapply(data.DGM, function(x) x )
+lapply(data.gramFreq, function(x) head(table(x), 5))
+data.DGM <- lapply(data.DTM, function(x) tm::removeSparseTerms(x, 0.99))
+
+```
+
+
+
+## references
+https://eight2late.wordpress.com/2015/05/27/a-gentle-introduction-to-text-mining-using-r/
+http://stackoverflow.com/questions/13614399/how-can-i-use-attr-with-lapply

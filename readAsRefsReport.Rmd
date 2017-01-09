@@ -1,0 +1,202 @@
+---
+title: "Capstone Milestone Report"
+author: "Warren T Ferrell Jewell"
+date: "November 16, 2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## About the Data
+
+```{r setup, include=FALSE}
+#rm(list=ls())
+mainPath <- "C:/Users/warre/Dropbox/GitHub/CAPSTONE/"
+setwd(mainPath)
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, message=FALSE, warning=FALSE)
+library(tm); library(ggplot2); library(dplyr); library(compiler); library(pryr)
+library(foreach); library(doParallel); library(microbenchmark); library(fastmatch)
+source(paste0(mainPath, "scripts/cleanLine.R"))
+cleanLine <- compiler::cmpfun( cleanLine )
+xChars = 1E7 # work with subset of data from each set
+trainPath <- paste0(mainPath, 'data/en_US/',xChars,'/')
+scriptPath <- paste0(mainPath, 'scripts/')
+objPath <- paste0(mainPath, 'objects/')
+cacheObj = TRUE
+doParallel::registerDoParallel(cores= 4)
+```
+
+##Common Terms
+Using on the top 20000 terms (minimum vocabulary for an adult)
+
+```{r topTerms, echo = FALSE}
+if ( file.exists("objects/termFreq") ) {
+    load(file = "objects/termFreq")
+} else {
+    if ( file.exists("objects/tdm.trim") ) {
+        load(file = "objects/tdm.trim")
+    } else {
+        source(paste0(mainPath, "scripts/tdm.trim.R"))
+    }
+    termFreq <- as.matrix(slam::rollup(tdm.trim, 2, FUN = sum))
+    termFreq <- termFreq[order(termFreq, decreasing = TRUE), ]
+    save(termFreq, file = "objects/termFreq")
+}
+
+topTerms <- termFreq[1:20000]
+includedTerms <- c(names(topTerms), "\"", ".", "?", "!", ",",";", ":", "&") # add punctuation to terms to keep
+```
+
+## Load Data
+
+```{r loadData, echo=FALSE}
+source(paste0(scriptPath, 'refs/readRefsToCorpus.R'))
+#source(paste0(scriptPath, 'refs/readRefsToList.R'))
+#source(paste0(scriptPath, 'refs/readRefsToModel.R'))
+
+objPre <- paste0(objPath, 'refs/', xChars)
+readData <- compiler::cmpfun( readRefData )
+fileName <- paste0(objPre, "corpus")
+if ( cacheObj && file.exists(fileName) ) {
+    load(file = fileName)
+} else {
+    Rprof("read.out")
+    corpus <- readData(trainPath, includedTerms, xChars, parallel = TRUE)
+    Rprof(NULL)
+    summaryRprof("read.out")
+    save(corpus, file = fileName)
+}
+```
+
+
+## N-grams
+Now that we have all sentences
+
+```{r makeNGrams, echo=FALSE}
+source(paste0(scriptPath, 'gramTokenizer.R'))
+maxGram = 12
+minFreq = 5
+formals(ngram_tokenizer)$k <- maxGram
+ngram_tokenizer <- compiler::cmpfun( ngram_tokenizer )
+cntrl <- list(tokenize = Token_Tokenizer(ngram_tokenizer),
+              bounds = list(global = c(minFreq , Inf)), 
+              tolower = TRUE) #tolower = FALSE causes Error in table(txt) : attempt to make a table with >= 2^31 elements
+fileName <- paste0(objPre, "gdm", "MinFreq", minFreq)
+# if ( file.exists(fileName) && cacheObj ) {
+#     load(file = fileName)
+# } else {
+#     gdm <- foreach(document = corpus, .combine = 'c',
+#                    .packages=c('magrittr','tm')) %dopar% {
+#         tm::VCorpus(VectorSource(document[[1]])) %>%
+#             tm::TermDocumentMatrix(control =  cntrl)
+#     }
+#     save(gdm, file = fileName)
+# }
+gdm <- TermDocumentMatrix(corpus, control =  cntrl)
+gramFreq <- as.matrix(slam::rollup(gdm, 2, FUN = sum))
+gramFreq <- gramFreq[order(gramFreq, decreasing = TRUE), ]
+if( length(gramFreq) > 1e5 )
+        gramFreq <- gramFreq[1:1e5]
+gdm
+head(gramFreq, n=5L) #most frequent grams
+lapply(head(names(gramFreq), n= 5L), function(x) includedTerms[as.numeric(eval(parse(text = x)))]) 
+tail(gramFreq, n=5L) #least frequent grams
+lapply(tail(names(gramFreq), n=5L), function(x) includedTerms[as.numeric(eval(parse(text = x)))])
+
+```
+
+
+
+## Model
+Generate models by traversing each line in file. Use a environment of environments (a hash table) to dramatically reduce the size of the model. Each term has a list
+that points to terms that have been seen following that term. The final term in the
+gram is stored in the list with a frequency variable that is used to rank which
+is the most likely gram during prediction.
+
+
+```{r corpusModel}
+#rm(list=c("tdm.trim", "corpus","termFreq"))
+# source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/modelFromCorpus.R')
+# modelConststr <- compiler::cmpfun( modelConststr )
+# nGramModel.sort <- compiler::cmpfun( nGramModel.sort )
+# nGramModel.create <- compiler::cmpfun( nGramModel.create )
+```
+
+
+
+
+```{r makeModel}
+source(paste0(scriptPath, 'gdmModel.R'))
+modelConststr <- compiler::cmpfun( modelConststr )
+gramOrder <- compiler::cmpfun( gramOrder )
+nGramModel.create <- compiler::cmpfun( nGramModel.create )
+fileName <- paste0(objPre, "gramModel", "MinFreq", minFreq)
+if ( cacheObj && file.exists(fileName) ) {
+    load(file = fileName)
+} else {
+    gramModel <- nGramModel.create(gramFreq, maxGram)
+    save(gramModel, file = fileName)
+}
+
+```
+
+
+
+## Predict
+With our generated model we predict some common phrases and see how the top 3 
+suggestions vary across the datasets. The 
+
+```{r predictFunction, echo=FALSE}
+source(paste0(scriptPath, 'refs/refPredict.R'))
+
+formals(nGramModel.predict)$k <- maxGram
+formals(nGramModel.predict)$commonTerms <- includedTerms
+# modelSearch <- compiler::cmpfun( modelSearch )
+# nGramModel.predict <- compiler::cmpfun( nGramModel.predict )
+
+nGramModel.predict( gramModel, 'the', maxGram )
+nGramModel.predict( gramModel, 'in', maxGram )
+nGramModel.predict( gramModel, 'of', maxGram )
+nGramModel.predict( gramModel, 'case of', maxGram )
+nGramModel.predict( gramModel, 'a case of', maxGram )
+
+```
+
+
+```{r}
+quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of", 
+    "You're the reason why I smile everyday. Can you follow me please? It would mean the",
+    "Hey sunshine, can you follow me and make me the",
+    "Very early observations on the Bills game: Offense still struggling but the",
+    "Go on a romantic date at the",
+    "Well I'm pretty sure my granny has some old bagpipes in her garage I'll dust them off and be on my",
+    "Ohhhhh #PointBreak is on tomorrow. Love that film and haven't seen it in quite some",
+    "After the ice bucket challenge Louis will push his long wet hair out of his eyes with his little",
+    "Be grateful for the good times and keep the faith during the",
+    "If this isn't the cutest thing you've ever seen, then you must be")
+
+```
+
+
+```{r predict}
+
+lapply(quiz, function(x) nGramModel.predict( gramModel, x, maxGram ) )
+
+
+```
+
+
+## Thoughts
+Need to remove grams that resulted from removing uncommon terms from the dataset. 
+
+
+## references
+https://eight2late.wordpress.com/2015/05/27/a-gentle-introduction-to-text-mining-using-r/
+
+http://stackoverflow.com/questions/13614399/how-can-i-use-attr-with-lapply
+
+http://stackoverflow.com/questions/32997201/how-to-store-sparsity-and-maximum-term-length-of-a-term-document-matrix-from-tm
+
+http://www.economist.com/blogs/johnson/2013/05/vocabulary-size
+
+http://stackoverflow.com/questions/31527345/how-to-add-unequal-length-named-vectors-in-r

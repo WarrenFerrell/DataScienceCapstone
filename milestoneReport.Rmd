@@ -1,0 +1,336 @@
+---
+title: "Capstone Milestone Report"
+author: "Warren T Ferrell Jewell"
+date: "November 16, 2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## About the Data
+Data is provided by swiftkey in conjunction with Coursera Data Science CAPSTONE 
+presented by Johns Hopkins University. The three English datasets were used for
+this analysis.
+
+* Twitter is 159 MB with 2360148 lines
+* Blogs is   200 MB with 899288 lines
+* News is    196 MB with 77259 lines
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, cache=TRUE, message=FALSE, warning=FALSE)
+library(tm); library(ggplot2); library(dplyr)
+dataPath <- "data/en_US/"
+twitDir =  paste0(dataPath, "twitter/")
+blogDir = paste0(dataPath, "blogs/")
+newsDir = paste0(dataPath, "news/")
+twitFile = paste0(twitDir, "en_US.twitter.txt")
+blogFile = paste0(blogDir, "en_US.blogs.txt")
+newsFile = paste0(newsDir, "en_US.news.txt")
+twitLines = 2360148
+blogLines = 899288
+newsLines = 77259
+twitChars = 162384825
+blogChars = 370746263
+newsChars = 386430028
+twitSize = 159
+blogSize = 200
+newsSize = 196
+readPartial <- function(filePath, NChars, xChars = NChars ) {
+    fileCon <- file(filePath, "rt")
+    partial <- list()
+    if( xChars == "all")
+        p = 1
+    else
+        p = xChars / NChars #probability that a line should be grabbed
+    nGrabbed = 1
+    while(length(line <- readLines(fileCon, n = 1L, warn=FALSE)) > 0) {
+        if( runif(1) < p ) {
+            x <- line %>% gsub(pattern = "#\\w+", replace = "") %>%
+                gsub(pattern = "[^a-zA-Z '’.!,;]", replace = " ") %>% 
+                gsub(pattern = "([[:punct:]])[[:punct:]]+", replace = "\\1") %>%
+                gsub(pattern = "([[:punct:]])", replace = " \\1 ") # add space before/after punct
+            #remove hashtags, nonenglish symbols, and repeated punctuation 
+            partial <- c(partial, x) 
+            nGrabbed = nGrabbed + 1
+        }
+    }
+    close(fileCon)
+    partialCorpus <- tm::VCorpus(VectorSource(partial),
+        readerControl = list(reader = readPlain, language = "en_US"))
+    meta(partialCorpus, tag = "file") <- basename(filePath)
+    source <- gsub(filePath, pattern = paste0(dataPath,"([[:alpha:]]+)/.*"), replace = "\\1")
+    meta(partialCorpus, tag = "source") <- source
+    print(paste("Grabbed", nGrabbed, "lines from", source))
+    return(partialCorpus)
+}
+getTDMstats <- function(x) {
+    # where x is a TermDocumentMatrix
+    list(sparsity = ifelse(!prod(dim(x)), 100, round((1 - length(x$v)/prod(dim(x))) * 100)) / 100,
+         maxtermlength = max(nchar(Terms(x), type = "chars"), 0), 
+         weightingLong = attr(x, "weighting")[1], 
+         weightingShort = attr(x, "weighting")[2], 
+         nonsparse = length(x$v), 
+         sparse = prod(dim(x)) - length(x$v))
+}
+
+```
+
+##Loading Data
+Data is too big to work with all at once so a subset that is equal to about 10 MB
+was used. Randomly selecting lines from the data. The tm package is slow to manipulate 
+whole corpora (collection of text data) so some data cleaning was reformed during
+data loading. These inclue removing non english characters, double punctuation,
+and twitter hashtags. A space was also added before and after each punctuation mark
+so they can be treated as part of an n-gram.
+
+```{r loadingSubsetData, cache=TRUE, echo=FALSE}
+xChars = 1E8 # work with about 100 MBs of data from each set
+fileName <- paste0("RawCorpora", xChars, "characters")
+if ( file.exists(fileName) ) {
+    load(file = fileName)
+} else {
+    set.seed(4684)
+    twit <- readPartial(twitFile, twitChars , xChars)  
+    blog <- readPartial(blogFile, blogChars , xChars)
+    news <- readPartial(newsFile, newsChars , xChars)
+    corpora <- list(twit=twit,blog=blog, news=news)
+    save(corpora, file = fileName)
+}
+rm(list = ls(pattern = "^[^c].*$")) #remove everything except corpora
+```
+
+## Basic look at data
+To examine data we generate a term document matrix (TDM) from each corpus after
+removing whitespace, and changing letters to all lower case. Punctuation and stopwords are left in because they could heavily affect text prediction. We ignore all terms that only occur once.
+
+```{r clningData, cache=TRUE}
+transformations <- list( content_transformer(tolower), stripWhitespace )
+corpora <- lapply(corpora, function(x) 
+            tm_map(x, tm_reduce, tmFuns = transformations))
+tdm <- lapply(corpora, function(x) tm::TermDocumentMatrix(x, list(global = list(c(2,Inf)))))
+tdm
+```
+
+## Cleaning Data
+We see that each corpus still has thousands of terms and each term is extremely sparse.
+A term Frequency vector cannot be generated on most computers by R's default as.matrix
+function (can't allocate a 62 GB vector). Interestingly, news posts have the best
+convergence with only 11551 terms but its sparsity (appears in few documents)
+is still approximately 100%. This is due to a large number of 
+terms that still only occur a few number of times - e.g. 11960 terms only appear once 
+in the twitter corpora. To fix this we remove all terms with sparsity less than
+0.999 from the TDM. This number was found experimentally. Sparsity of .99 produced only 128 terms from
+twitter. An average native speaker has a vocabulary of 20,000 - 35,000 so a 128 term
+model would likely not be able to predict even 1% of any 2 - grams they might devise. 
+0.999 produced 1132, 3172, and 4830 terms respectively
+
+```{r sparseTerms}
+tdm.cln <- lapply(tdm, function(x) tm::removeSparseTerms(x, 0.999))
+tdm.cln
+termFreq <- lapply(tdm.cln, function(x) as.matrix(slam::rollup(x, 2, FUN = sum)))
+termFreq <- lapply( termFreq, function(x) x[order(x, decreasing = TRUE), ])
+lapply(termFreq, head)
+lapply(termFreq, tail)
+```
+
+## Exploring Data Terms
+This gets us down to a maximum term count of around 3000 which is a 
+managable 37 billion searchspace for a 3-gram prediction algorithm. Using ggplot2
+we graph the most common and least common terms from each dataset
+
+```{r terms, echo=FALSE}
+terms <- lapply(termFreq, FUN = function(x) data.frame(t(x)))
+terms <- Reduce(function(x,y) merge(x,y, all = TRUE), terms)
+row.names(terms) <- rev(names(tdm))
+terms <- terms[ , apply(terms, 2, function(x) !anyNA(x))]
+terms["source"] <- row.names(terms)
+firstCols <- c(names(terms)[1:10], "source")
+reshape::melt.data.frame( terms[,firstCols], id.vars = "source",
+            value_name = "freq", variable_name = "term") %>%
+    ggplot2::ggplot(aes(x = term, y = value, fill = source)) + 
+        geom_bar( position = "dodge", stat = "identity", alpha = .3 ) +
+        ylab("frequency") + ggtitle("Top terms")
+lastCols <- c(rev(names(terms))[2:11], "source")
+reshape::melt.data.frame( terms[,lastCols], id.vars = "source",
+            value_name = "freq", variable_name = "term") %>%
+    ggplot2::ggplot(aes(x = term, y = value, fill = source)) + 
+        geom_bar( position = "dodge", stat = "identity", alpha = .3 ) +
+        ylab("frequency") + ggtitle("Bottom terms")
+```
+
+## Remove infrequent terms from corpora 
+Using the cleaned tdm we come up with a list of terms to keep from each corpus. 
+Removing all words we don't want would be far more computationally 
+expensive and the tm package provides a 
+removeWords function but it works by forming a very large regex
+expression. A regex that long is not supported by the compiler so we would need to use a 
+loop to remove each term from the corpurs ourself.
+
+```{r infrequentTerms}
+commonTerms <- lapply(tdm.cln, function(x) x$dimnames$Terms)
+for (i in seq_along(corpora)) {    # no easy pass by reference in R
+    takeCommonTerms <- function(x) { 
+        s <- strsplit(x, split = " ")
+        y <- c()
+        for(word in unlist(s)) {
+            if(word %in% commonTerms[[i]]) 
+                y <- paste(y, word, sep = " ")
+        }
+        return(y)
+    }
+    corpora[[i]] <- tm_map(corpora[[i]], content_transformer(takeCommonTerms))
+}
+
+```
+
+## N-grams
+Now that we have the most common terms we create all the potenial 2-4 grams 
+that we will attempt to predict.
+
+```{r makeNGrams, echo=FALSE}
+ngram_tokenizer <- function(s, k = 2:4) {
+        x <- strsplit(as.String(s), " ")[[1]]
+        tokens <- c()
+        for( n in k )
+            tokens <- c(tokens, ngrams( x[(x != "") & (x != " ") ], n ))
+        return( tokens )
+}
+ngram_tokenizer <- Token_Tokenizer(ngram_tokenizer)
+cntrl <- list(tokenizer = ngram_tokenizer, global = list(c(2,Inf)))
+gdm <- lapply(corpora, function(x) tm::TermDocumentMatrix(x, cntrl))
+gramFreq <- lapply(gdm, function(x) as.matrix(slam::rollup(x, 2, FUN = sum)))     
+gramFreq <- lapply(gramFreq, function(x) x[order(x, decreasing = TRUE), ])
+gdm
+lapply(gramFreq, head) #most frequent grams
+lapply(gramFreq, tail) #least frequent grams
+```
+
+## Clean Ngrams
+Too many grams to deal with so we must remove sparse ngrams. Then look at the bottom
+ngrams to see if they are sensicle.
+
+```{r cleanNgrams}
+gdm.cln <- gdm
+gdm.cln <- lapply(gdm, function(x) tm::removeSparseTerms(x, 0.999))
+gramFreq <- lapply(gdm.cln, function(x) as.matrix(slam::rollup(x, 2, FUN = sum)))
+gramFreq <- lapply(gramFreq, function(x) x[order(x, decreasing = TRUE), ])
+gdm.cln
+lapply(gramFreq, tail)
+```
+
+##Top Ngrams
+Graph of top and bottom grams
+
+```{r exploreGrams, echo = FALSE}
+grams <- lapply(gramFreq, FUN = function(x) data.frame(t(x)))
+grams <- Reduce(function(x,y) merge(x,y, all = TRUE), grams)
+row.names(grams) <- rev(names(tdm))
+grams <- grams[ , apply(grams, 2, function(x) !anyNA(x))]
+grams["source"] <- row.names(grams)
+firstCols <- c(names(grams)[1:3], "source")
+reshape::melt.data.frame( grams[,firstCols], id.vars = "source",
+                        value_name = "freq", variable_name = "gram") %>%
+    ggplot2::ggplot(aes(x = gram, y = value, fill = source)) + 
+        geom_bar( position = "dodge", stat = "identity", alpha = .3 ) +
+        ylab("frequency") + ggtitle("Top grams")
+lastCols <- c(rev(names(grams))[2:4], "source")
+reshape::melt.data.frame( grams[,lastCols], id.vars = "source",
+                value_name = "freq", variable_name = "gram") %>%
+    ggplot2::ggplot(aes(x = gram, y = value, fill = source)) + 
+        geom_bar( position = "dodge", stat = "identity", alpha = .3 ) +
+        ylab("frequency") + ggtitle("Bottom grams")
+```
+
+
+## Model
+Generate models based on the created Ngrams. Use a list of linked lists (essentially 
+a hash table) to dramatically reduce the size of the model. Each term has a list
+that points to terms that have been seen following that term. The final term in the
+gram is stored in the list with a frequency variable that is used to rank which
+is the most likely gram during prediction.
+
+```{r model}
+nGramModel.create <- function(gramFreq) {
+    model <- structure(list(), class = "nGramModel")
+    for (i in seq_along(gramFreq)) {
+        gram <- eval(parse(text = names(gramFreq[i])))
+        freq <- gramFreq[[i]]
+        recurse <- function(model, gram, freq) {
+            term = gram[[1]]
+            if( length(gram) == 1 ) {
+                model[[term]] <- list("gfreq" = freq)
+                return( model )
+            }
+            else {
+                model[[term]] <- recurse(model[[term]], gram[-1], freq)
+                return( model )
+            }
+        }
+        model  <- recurse(model, gram, freq) 
+    }
+    return ( model )
+}
+gramModel <- lapply(gramFreq, function(x) nGramModel.create(x))
+save(gramModel, file = paste0(object.size(gramModel), "gramModel.RData"))
+```
+
+## Predict
+With our generated model we predict some common phrases and see how the top 3 
+suggestions vary across the datasets. The 
+
+```{r predict, echo=FALSE}
+nGramModel.predict <- function(model, pGram = list("")) {
+    pGram <- tolower(pGram)
+    if( is.character(pGram) & length(pGram) == 1 ){
+        pGram <- as.character(strsplit(pGram, split = " ")[[1]])
+    }
+    if( length(pGram) > 3)
+            pGram <- pGram[ (length(pGram)-2):length(pGram)] # Take only the last 3 terms
+    if( length(pGram) == 0 ) {
+        freqSort <- c(0)
+        termSort <- c("")
+        
+        for( l in seq_along(model) ){
+            freq <- 1
+            term <- ""
+            if( ! is.numeric(model[[l]]) ){
+                term <- names(model)[[l]]
+                if( is.null((freq <- model[[l]]$gfreq)))
+                    freq <- 1
+            } 
+            for( t in seq_along(termSort) ) {
+                if( freq > freqSort[[t]] ) {
+                    freqSort <- append(freqSort, freq, after = t - 1)
+                    termSort <- append(termSort, term, after = t - 1)
+                    break # Found position
+                } 
+            }
+        }
+        return( termSort[1:3] )
+    } else if ( pGram[[1]] %in% names(model) ) {
+        pterm <- pGram[[1]]
+        
+        return( nGramModel.predict(model[[pterm]], pGram[-1]) )
+    } else {
+        return( nGramModel.predict(model, pGram[-1]) ) 
+    }
+}
+lapply(gramModel, function(x) suppressWarnings(nGramModel.predict(x, "the")))
+lapply(gramModel, function(x) suppressWarnings(nGramModel.predict(x, "thanks for")))
+lapply(gramModel, function(x) suppressWarnings(nGramModel.predict(x, "you")))
+
+```
+
+
+## Thoughts
+Need to remove grams that resulted from removing uncommon terms from the dataset. 
+
+
+## references
+https://eight2late.wordpress.com/2015/05/27/a-gentle-introduction-to-text-mining-using-r/
+
+http://stackoverflow.com/questions/13614399/how-can-i-use-attr-with-lapply
+
+http://stackoverflow.com/questions/32997201/how-to-store-sparsity-and-maximum-term-length-of-a-term-document-matrix-from-tm
+
+http://www.economist.com/blogs/johnson/2013/05/vocabulary-size
