@@ -28,11 +28,13 @@ modelSearch <-  function(model, pGram, lock = 0) {
     return( pred )#return( tapply(pred, names(pred), sum) ) #combine all results by term
 }
 
-nGramModel.predict <- function(model, pGramRaw = list(""), k = Inf, commonTerms) {
-    pGram <- strsplit(cleanLine(pGramRaw), split = "\\s+")[[1]][-1]  %>%
+nGramModel.predict <- function(model, pGramRaw = list(''), k = Inf, commonTerms) {
+    if(inherits(model, 'nGramModel'))
+       model <- model$model
+    pGram <- strsplit(cleanLine(pGramRaw), split = '\\s+')[[1]][-1]  %>%
 		fmatch( commonTerms ) %>% as.character
     if( length(pGram) > (k - 1) )                             # Longest predictions
-		pGram <- pGram[ (length(pGram)- k + 1):length(pGram)] # are with 12 grams
+		pGram <- pGram[ (length(pGram)- k + 1):length(pGram)] # are with k grams
 
     pred <- modelSearch(model, pGram)
     #sort(modelSearch(model, pGram), decreasing = TRUE)[1:15]

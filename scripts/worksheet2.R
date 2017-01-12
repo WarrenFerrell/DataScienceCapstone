@@ -1,8 +1,16 @@
-#gList <- env2list(gramModel)
+#gList <- env2list(grm1mModel)
 
-a <- new.env()
-a[['1']] <- 'test1'
-a[['2']] <- new.env()
-a[['2']][['1']] <- 'test2'
-a[['2']][['2']] <- new.env()
-a[['2']][['2']][['1']] <- 'test3'
+m1 <- new.env()
+m1[['a']] <- new.env()
+m1[['a']][['gfreq']] <- 9
+m1[['a']][['b']] <- new.env()
+m1[['a']][['b']][['gfreq']] <- 8
+
+m2 <- new.env()
+#m2 <- m1
+m2[['a']] <- new.env()
+m2[['a']][['gfreq']] <- 1
+m2[['a']][['b']] <- new.env()
+m2[['a']][['b']][['gfreq']] <- 2
+m2[['c']] <- new.env()
+m2[['c']][['gfreq']] <- 10

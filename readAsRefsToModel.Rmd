@@ -10,7 +10,7 @@ output:
 ## About the Data
 
 ```{r setup, include=FALSE}
-#rm(list=ls())
+rm(list=ls())
 mainPath <- "C:/Users/warre/Dropbox/GitHub/CAPSTONE/"
 setwd(mainPath)
 knitr::opts_chunk$set(echo = TRUE, include = TRUE, message=FALSE, warning=FALSE)
@@ -18,12 +18,14 @@ library(tm); library(ggplot2); library(dplyr); library(compiler); library(pryr)
 library(foreach); library(doParallel); library(microbenchmark); library(fastmatch)
 source(paste0(mainPath, "scripts/cleanLine.R"))
 cleanLine <- compiler::cmpfun( cleanLine )
-xChars = 1E7 # work with subset of data from each set
+vocabulary = 20000
+xChars = 1E4 # work with subset of data from each set
 trainPath <- paste0(mainPath, 'data/en_US/',xChars,'/')
 scriptPath <- paste0(mainPath, 'scripts/')
 objPath <- paste0(mainPath, 'objects/')
-cacheObj = TRUE
+cacheObj = FALSE
 doParallel::registerDoParallel(cores= 4)
+
 ```
 
 ##Common Terms
@@ -43,116 +45,66 @@ if ( file.exists("objects/termFreq") ) {
     save(termFreq, file = "objects/termFreq")
 }
 
-topTerms <- termFreq[1:20000]
+topTerms <- termFreq[1:vocabulary]
+rm(termFreq)
 includedTerms <- c(names(topTerms), "\"", ".", "?", "!", ",",";", ":", "&") # add punctuation to terms to keep
 ```
 
 ## Load Data
-
-```{r loadData, echo=FALSE}
-source(paste0(scriptPath, 'refs/readRefsToCorpus.R'))
-#source(paste0(scriptPath, 'refs/readRefsToList.R'))
-#source(paste0(scriptPath, 'refs/readRefsToModel.R'))
-
-objPre <- paste0(objPath, 'refs/', xChars)
-readData <- compiler::cmpfun( readRefData )
-fileName <- paste0(objPre, "corpus")
-if ( cacheObj && file.exists(fileName) ) {
-    load(file = fileName)
-} else {
-    Rprof("read.out")
-    corpus <- readData(trainPath, includedTerms, xChars, parallel = TRUE)
-    Rprof(NULL)
-    summaryRprof("read.out")
-    save(corpus, file = fileName)
-}
-```
-
-
-## N-grams
-Now that we have all sentences
-
-```{r makeNGrams, echo=FALSE}
-source(paste0(scriptPath, 'gramTokenizer.R'))
-maxGram = 12
-minFreq = 5
-formals(ngram_tokenizer)$k <- maxGram
-ngram_tokenizer <- compiler::cmpfun( ngram_tokenizer )
-cntrl <- list(tokenize = Token_Tokenizer(ngram_tokenizer),
-              bounds = list(global = c(minFreq , Inf)), 
-              tolower = TRUE) #tolower = FALSE causes Error in table(txt) : attempt to make a table with >= 2^31 elements
-fileName <- paste0(objPre, "gdm", "MinFreq", minFreq)
-# if ( file.exists(fileName) && cacheObj ) {
-#     load(file = fileName)
-# } else {
-#     gdm <- foreach(document = corpus, .combine = 'c',
-#                    .packages=c('magrittr','tm')) %dopar% {
-#         tm::VCorpus(VectorSource(document[[1]])) %>%
-#             tm::TermDocumentMatrix(control =  cntrl)
-#     }
-#     save(gdm, file = fileName)
-# }
-gdm <- TermDocumentMatrix(corpus, control =  cntrl)
-gramFreq <- as.matrix(slam::rollup(gdm, 2, FUN = sum))
-gramFreq <- gramFreq[order(gramFreq, decreasing = TRUE), ]
-if( length(gramFreq) > 1e5 )
-        gramFreq <- gramFreq[1:1e5]
-gdm
-head(gramFreq, n=5L) #most frequent grams
-lapply(head(names(gramFreq), n= 5L), function(x) includedTerms[as.numeric(eval(parse(text = x)))]) 
-tail(gramFreq, n=5L) #least frequent grams
-lapply(tail(names(gramFreq), n=5L), function(x) includedTerms[as.numeric(eval(parse(text = x)))])
-
-```
-
-
-
-## Model
 Generate models by traversing each line in file. Use a environment of environments (a hash table) to dramatically reduce the size of the model. Each term has a list
 that points to terms that have been seen following that term. The final term in the
 gram is stored in the list with a frequency variable that is used to rank which
-is the most likely gram during prediction.
+is the most likely gram during prediction. Because this method doesn't grab the 
+frequency of every single gram (something that requires more memory than a 16GB RAM
+laptop can provide) it sets a maximum allowable memory for the model and then
+trims all all grams that don't meet a set minimum frequency. This method can lose
+low frequency grams with the highest frequency that could be lost being equal to
+the number of times that the model is trimed.
 
 
-```{r corpusModel}
-#rm(list=c("tdm.trim", "corpus","termFreq"))
-# source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/modelFromCorpus.R')
+```{r loadData, echo=FALSE}
+minFreq <- 2
+maxGram <- 10
+maxMem <-  100  # limit of model in MB : memory.limit() - mem_used() 
+source(paste0(scriptPath, 'refs/readRefsToModel.R'))
+source(paste0(scriptPath, 'modelMerge.R'))
+objPre <- paste0(objPath, 'refs/inPlace/', xChars, 'Vocab', vocabulary, 'MaxMem', maxMem)
+
+
+mergeModels <- compiler::cmpfun( mergeModels )
 # modelConststr <- compiler::cmpfun( modelConststr )
-# nGramModel.sort <- compiler::cmpfun( nGramModel.sort )
-# nGramModel.create <- compiler::cmpfun( nGramModel.create )
-```
+# inPlaceModel.create <- compiler::cmpfun( inPlaceModel.create ) 
+# modelFromFile <- compiler::cmpfun( modelFromFile ) 
+# readRefData <- compiler::cmpfun( readRefData )
 
-
-
-
-```{r makeModel}
-source(paste0(scriptPath, 'gdmModel.R'))
-modelConststr <- compiler::cmpfun( modelConststr )
-gramOrder <- compiler::cmpfun( gramOrder )
-nGramModel.create <- compiler::cmpfun( nGramModel.create )
 fileName <- paste0(objPre, "gramModel", "MinFreq", minFreq)
 if ( cacheObj && file.exists(fileName) ) {
     load(file = fileName)
 } else {
-    gramModel <- nGramModel.create(gramFreq, maxGram)
+    #Rprof("read.out")
+    gramModel <- readRefData(trainPath, includedTerms, maxGram, minFreq, parallel = FALSE)
+    #Rprof(NULL)
+    #summaryRprof("read.out")
     save(gramModel, file = fileName)
 }
 
 ```
 
-
-
 ## Predict
-With our generated model we predict some common phrases and see how the top 3 
-suggestions vary across the datasets. The 
+With our generated model we predict some common phrases
 
 ```{r predictFunction, echo=FALSE}
+source(paste0(scriptPath, 'nGramModelClass.R'))
 source(paste0(scriptPath, 'refs/refPredict.R'))
+source(paste0(scriptPath, 'env2list.R'))
 
+gList <- env2list(gramModel$model)
+object.size(gramModel)
+object_size(gList)
 formals(nGramModel.predict)$k <- maxGram
 formals(nGramModel.predict)$commonTerms <- includedTerms
-# modelSearch <- compiler::cmpfun( modelSearch )
-# nGramModel.predict <- compiler::cmpfun( nGramModel.predict )
+modelSearch <- compiler::cmpfun( modelSearch )
+nGramModel.predict <- compiler::cmpfun( nGramModel.predict )
 
 nGramModel.predict( gramModel, 'the', maxGram )
 nGramModel.predict( gramModel, 'in', maxGram )

@@ -29,21 +29,17 @@ readRefData <- function(filePath, commonTerms, xChars, parallel = FALSE ) {
         return( tm::VCorpus(tm::VectorSource(unlist(lines))) )
     } )
 
-
+	formals(foreach)$.combine <- 'c'
+	formals(foreach)$.packages <- c('tm','fastmatch')
+	formals(foreach)$.inorder <- FALSE
+	formals(foreach)$.verbose <- TRUE
+	
     if( parallel ) {
-        corpus.all <- foreach(fileName = file.names, .combine = 'c',
-                              .packages=c('tm','fastmatch'),
-                              .inorder=FALSE,
-                              .verbose=TRUE) %dopar%  {
-            cleanFile(fileName)
-                              }
+        corpus.all <- foreach(fileName = file.names) %dopar%  {
+            cleanFile(fileName) }
     } else {
-        corpus.all <- foreach(fileName = file.names, .combine = 'c',
-                              .packages=c('tm','fastmatch'),
-                              .inorder=FALSE,
-                              .verbose=TRUE) %do%  {
-            cleanFile(fileName)
-                              }
+        corpus.all <- foreach(fileName = file.names) %do%  {
+            cleanFile(fileName) }
     }
 
     return( corpus.all )
