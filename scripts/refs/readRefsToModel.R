@@ -1,4 +1,4 @@
-library(foreach); library(tm); library(compiler); library(fastmatch)
+library(foreach); library(pryr); library(compiler); library(fastmatch)
 
 modelConststr <- function(model, gram) {
     #browser()
@@ -13,14 +13,31 @@ modelConststr <- function(model, gram) {
     return( model )
 }
 
+#Uses side effects to remove all terms with a frequency less than minFreq
+cleanModel <- function(model, minFreq) {
+    if( !is.environment(model) ) { #TRUE = called with 'gfreq' value
+        return( model < minFreq ) #calling recursion needs to rm ptr
+    } else {
+        delete <- TRUE
+        for( term in ls(model) ){
+            if(cleanModel(model[[term]], minFreq))
+                delete <- FALSE
+            else
+                rm(term, pos = model)
+        }
+        return( delete )
+    }
+}
 
-inPlaceModel.create <- function(model, wordRefs, maxGram = 10) {
+#
+
+inPlaceModel.create <- function(gramModel, wordRefs, startMem) {
     #browser()
-
+    model <- gramModel$model
     for(n in 1:(length(wordRefs)-1)) {
         if( !is.na(wordRefs[n]) ) { #ignore grams that start with NA
-            gram <- if(length(wordRefs) - n + 1 >= maxGram )
-                        wordRefs[(n):(n + maxGram)]
+            gram <- if((length(wordRefs) - n + 1) >= gramModel$maxGram )
+                        wordRefs[(n):(n + gramModel$maxGram)]
                     else
                         wordRefs[(n):length(wordRefs)] #save some chopping computation
             while(is.na(tail(gram,1)))
@@ -28,28 +45,38 @@ inPlaceModel.create <- function(model, wordRefs, maxGram = 10) {
             model <- modelConststr(model, gram)
         }
     }
-    return( model )
+    if( (mem_used() - startMem) > (gramModel$maxMem * 1048576)){
+        cleanModel(model, minFreq)
+    }
+    gramModel$size <- mem_used() - startMem
+    #gramModel$model <- model     #not needed due to side effects with environments
+    return( gramModel )
 }
 
 
-readRefData <- function(filePath, commonTerms, maxGram = 10, parallel = FALSE ) {
+readRefData <- function(filePath, commonTerms,
+                        maxGram=10, maxMem, minFreq,
+                        parallel=FALSE) {
+
     modelFromFile <- function(fileName) {
+        startMem <- pryr::mem_used()
         fileCon <- file(fileName, "rt")
-        model <- new.env()
+        gramModel <- nGramModel(maxMem = maxMem, maxGram = maxGram,
+                                minFreq = minFreq)
         grams <- list()
         while(length(line <- readLines(fileCon, n = 1L, warn=FALSE)) > 0) {
             words <- strsplit(cleanLine(line), " ")[[1]] # split to words / punctuation
             words <- words[ words != "" ]
             wordRefs <- fmatch(words, commonTerms) # get word references
             if( length(wordRefs) > 1 )
-                model <- inPlaceModel.create(model, wordRefs, maxGram)
+                gramModel <- inPlaceModel.create(gramModel, wordRefs, startMem)
         }
         close(fileCon)
-        return(model)
+        return( gramModel )
     }
 
     formals(foreach)$.combine <- mergeModels
-    formals(foreach)$.packages <- c('fastmatch','NLP')
+    formals(foreach)$.packages <- c('fastmatch','pryr')
     formals(foreach)$.inorder <- FALSE
     formals(foreach)$.verbose <- TRUE
 
@@ -58,8 +85,7 @@ readRefData <- function(filePath, commonTerms, maxGram = 10, parallel = FALSE ) 
         source("scripts/writePartitionCaret.R")
         file.names <- dir(filePath, full.names = TRUE)
     }
-
-    model.all <- new.env()
+    model.all <- nGramModel()
     for(i in seq_along(file.names)) {
         model.all <- mergeModels(model.all, modelFromFile(file.names[i]))
     }
