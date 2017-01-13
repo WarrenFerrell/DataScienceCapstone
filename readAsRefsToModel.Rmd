@@ -10,13 +10,14 @@ output:
 ## About the Data
 
 ```{r setup, include=FALSE}
-rm(list=ls())
+#rm(list=ls())
 mainPath <- "C:/Users/warre/Dropbox/GitHub/CAPSTONE/"
 setwd(mainPath)
 knitr::opts_chunk$set(echo = TRUE, include = TRUE, message=FALSE, warning=FALSE)
 library(tm); library(ggplot2); library(dplyr); library(compiler); library(pryr)
 library(foreach); library(doParallel); library(microbenchmark); library(fastmatch)
 source(paste0(mainPath, "scripts/cleanLine.R"))
+source(paste0(mainPath, "scripts/proftable.R"))
 cleanLine <- compiler::cmpfun( cleanLine )
 vocabulary = 20000
 xChars = 1E4 # work with subset of data from each set
@@ -68,23 +69,25 @@ maxGram <- 10
 maxMem <-  100  # limit of model in MB : memory.limit() - mem_used() 
 source(paste0(scriptPath, 'refs/readRefsToModel.R'))
 source(paste0(scriptPath, 'modelMerge.R'))
+source(paste0(scriptPath, 'nGramModelClass.R'))
 objPre <- paste0(objPath, 'refs/inPlace/', xChars, 'Vocab', vocabulary, 'MaxMem', maxMem)
 
-
-mergeModels <- compiler::cmpfun( mergeModels )
+formals(ls)$sorted <- FALSE #slowest part of ls
+# mergeModels <- compiler::cmpfun( mergeModels )
 # modelConststr <- compiler::cmpfun( modelConststr )
+# cleanModel <- compiler::cmpfun( cleanModel )
 # inPlaceModel.create <- compiler::cmpfun( inPlaceModel.create ) 
 # modelFromFile <- compiler::cmpfun( modelFromFile ) 
 # readRefData <- compiler::cmpfun( readRefData )
 
-fileName <- paste0(objPre, "gramModel", "MinFreq", minFreq)
+fileName <- paste0(objPre, 'gramModel', 'MinFreq', minFreq)
 if ( cacheObj && file.exists(fileName) ) {
     load(file = fileName)
 } else {
-    #Rprof("read.out")
-    gramModel <- readRefData(trainPath, includedTerms, maxGram, minFreq, parallel = FALSE)
-    #Rprof(NULL)
-    #summaryRprof("read.out")
+    Rprof('read.out')
+    gramModel <- readRefData(trainPath, includedTerms, maxGram, maxMem, minFreq, FALSE)
+    Rprof(NULL)
+    summaryRprof('read.out')
     save(gramModel, file = fileName)
 }
 
@@ -132,7 +135,7 @@ quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a
 
 ```{r predict}
 
-lapply(quiz, function(x) nGramModel.predict( gramModel, x, maxGram ) )
+#lapply(quiz, function(x) nGramModel.predict( gramModel, x, maxGram ) )
 
 
 ```
