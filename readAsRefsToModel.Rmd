@@ -88,6 +88,7 @@ if ( cacheObj && file.exists(fileName) ) {
     gramModel <- readRefData(trainPath, includedTerms, maxGram, maxMem, minFreq, FALSE)
     Rprof(NULL)
     summaryRprof('read.out')
+    proftable('read.out')
     save(gramModel, file = fileName)
 }
 

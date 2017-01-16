@@ -7,16 +7,20 @@
 library(pryr);
 
 mergeModels <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
-    mergeRec <- function(A, B) { # add all of B's terms to A
+    mergeRec <- function(A, B, sizePtr) { # add all of B's terms to A
+
         for( term in ls(B) ) {
+            #browser(expr = (term == '1'))
             A[[term]] <- if(is.null(A[[term]])) {
                             B[[term]]
                         } else {
                             if( term == 'gfreq' ) {
+                                sizePtr[['*']] <- sizePtr[['*']] - 160
                                 A[[term]] + B[[term]]
 
                             } else {
-                                mergeRec(A[[term]], B[[term]])
+                                sizePtr[['*']] <- sizePtr[['*']] - (160 * 2.75)
+                                mergeRec(A[[term]], B[[term]], sizePtr)
                             }
                         }
         }
@@ -24,13 +28,15 @@ mergeModels <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
     }
 
     args <- list(...)
-    startMem <- mem_used()
-    ret <- if(sideEffects) args[[1]] else nGramModel(maxMem = args[[1]]$maxMem, minFreq = args[[1]]$minFreq)
+    ret <- if(sideEffects) args[[1]] else args[[1]]$copy()
+    sizePtr <- new.env()
 
-    for(i in seq(sideEffects + 1, length(args))) {
-        ret$model <- mergeRec(ret$model,args[[i]]$model)
+    for(i in seq(2, length(args))) {
+        ret$size <- ret$size + args[[i]]$size
+        sizePtr[['*']] <- ret$size
+        ret$model <- mergeRec(ret$model, args[[i]]$model , sizePtr)
+        ret$size <- sizePtr[['*']]
     }
-    ret$size <- if(sideEffects) ret$size + mem_used() - startMem
-                else mem_used() - startMem
+
     return(ret)
 }
