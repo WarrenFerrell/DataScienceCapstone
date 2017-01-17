@@ -1,17 +1,17 @@
-nGramModel.sort <- function(model) {
-    freq <- vector('numeric',length(model))
-    if( length(model) == 1 )
-        return( model )
-    for( i in seq_along(model) ) {
-        if( names(model)[[i]] == 'gfreq' ) {
+nGramTree.sort <- function(tree) {
+    freq <- vector('numeric',length(tree))
+    if( length(tree) == 1 )
+        return( tree )
+    for( i in seq_along(tree) ) {
+        if( names(tree)[[i]] == 'gfreq' ) {
             freq[[i]] <- Inf
         } else {
-            model[[i]] <- nGramModel.sort(model[[i]])
-            freq[[i]] <- if(!is.null(model[[i]]$gfreq)) model[[i]]$gfreq else NA
+            tree[[i]] <- nGramTree.sort(tree[[i]])
+            freq[[i]] <- if(!is.null(tree[[i]]$gfreq)) tree[[i]]$gfreq else NA
         }
 
     }
-    return( model[ order(freq, decreasing = TRUE) ] )
+    return( tree[ order(freq, decreasing = TRUE) ] )
 }
 
 
@@ -26,7 +26,7 @@ env2list <- function(env, sorted = TRUE) {
 		}
 	}
     if( sorted )
-        return( nGramModel.sort(ret) )
+        return( nGramTree.sort(ret) )
     else
         return( ret )
 }

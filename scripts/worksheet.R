@@ -28,4 +28,4 @@ library(microbenchmark); library(fastmatch)
 # #testSearch <- rep(testSearch, 2000)
 # print( microbenchmark(default(testCheck, testSearch), package(testCheck, testSearch), times = 1L) )
 
-gList <- env2list(gramModel)
+gList <- env2list(gramTree)

@@ -1,0 +1,5 @@
+setwd(mainPath)
+print(ls())
+source(paste0(scriptPath, 'refs/refs2Tree.R'))
+source(paste0(scriptPath, 'treeMerge.R'))
+source(paste0(scriptPath, 'nGramTreeClass.R'))

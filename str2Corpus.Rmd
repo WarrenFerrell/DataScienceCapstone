@@ -114,41 +114,41 @@ tail(gramFreq, n=6L) #least frequent grams
 
 
 
-## Model
-Generate models by traversing each line in file. Use a list of linked lists (essentially 
-a hash table) to dramatically reduce the size of the model. Each term has a list
+## Tree
+Generate trees by traversing each line in file. Use a list of linked lists (essentially 
+a hash table) to dramatically reduce the size of the tree. Each term has a list
 that points to terms that have been seen following that term. The final term in the
 gram is stored in the list with a frequency variable that is used to rank which
 is the most likely gram during prediction.
 
 
-```{r corpusModel}
+```{r corpusTree}
 #rm(list=c("tdm.trim", "corpus","termFreq"))
-# source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/modelFromCorpus.R')
-# modelConststr <- compiler::cmpfun( modelConststr )
-# nGramModel.sort <- compiler::cmpfun( nGramModel.sort )
-# nGramModel.create <- compiler::cmpfun( nGramModel.create )
+# source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/treeFromCorpus.R')
+# treeConststr <- compiler::cmpfun( treeConststr )
+# nGramTree.sort <- compiler::cmpfun( nGramTree.sort )
+# nGramTree.create <- compiler::cmpfun( nGramTree.create )
 ```
 
-```{r gdmModel}
+```{r gdmTree}
 #rm(list=c("tdm.trim", "corpus","termFreq"))
-source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/gdmModel.R')
-modelConststr <- compiler::cmpfun( modelConststr )
+source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/gdmTree.R')
+treeConststr <- compiler::cmpfun( treeConststr )
 gramOrder <- compiler::cmpfun( gramOrder )
-nGramModel.create <- compiler::cmpfun( nGramModel.create )
+nGramTree.create <- compiler::cmpfun( nGramTree.create )
 
 ```
 
 
 
 
-```{r makeModel}
-fileName <- paste0(filePre, "gramModel", "MinFreq", minFreq)
+```{r makeTree}
+fileName <- paste0(filePre, "gramTree", "MinFreq", minFreq)
 if ( file.exists(fileName) && cacheObj ) {
     load(file = fileName)
 } else {
-    gramModel <- nGramModel.create(gramFreq, 10)
-    save(gramModel, file = fileName)
+    gramTree <- nGramTree.create(gramFreq, 10)
+    save(gramTree, file = fileName)
 }
 
 ```
@@ -156,19 +156,19 @@ if ( file.exists(fileName) && cacheObj ) {
 
 
 ## Predict
-With our generated model we predict some common phrases and see how the top 3 
+With our generated tree we predict some common phrases and see how the top 3 
 suggestions vary across the datasets. The 
 
 ```{r predictFunction, echo=FALSE}
 source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/predict.R')
-modelSearch <- compiler::cmpfun( modelSearch )
-formals(nGramModel.predict)$k <- maxGram
-nGramModel.predict <- compiler::cmpfun( nGramModel.predict )
+treeSearch <- compiler::cmpfun( treeSearch )
+formals(nGramTree.predict)$k <- maxGram
+nGramTree.predict <- compiler::cmpfun( nGramTree.predict )
 
-nGramModel.predict( gramModel, "in", maxGram )
-nGramModel.predict( gramModel, "of", maxGram )
-nGramModel.predict( gramModel, "case of", maxGram )
-nGramModel.predict( gramModel, "a case of", maxGram )
+nGramTree.predict( gramTree, "in", maxGram )
+nGramTree.predict( gramTree, "of", maxGram )
+nGramTree.predict( gramTree, "case of", maxGram )
+nGramTree.predict( gramTree, "a case of", maxGram )
 
 ```
 
@@ -190,7 +190,7 @@ quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a
 
 ```{r predict}
 
-# lapply(quiz, function(x) nGramModel.predict( gramModel, x, maxGram ) )
+# lapply(quiz, function(x) nGramTree.predict( gramTree, x, maxGram ) )
 
 
 ```

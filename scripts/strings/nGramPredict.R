@@ -1,4 +1,4 @@
-nGramModel.predict <- function(model, pGram = list("")) {
+nGramTree.predict <- function(tree, pGram = list("")) {
     pGram <- tolower(pGram)
     if( is.character(pGram) & length(pGram) == 1 ){
         pGram <- as.character(strsplit(pGram, split = " ")[[1]])
@@ -9,12 +9,12 @@ nGramModel.predict <- function(model, pGram = list("")) {
         freqSort <- c(0)
         termSort <- c("")
         
-        for( l in seq_along(model) ){
+        for( l in seq_along(tree) ){
             freq <- 1
             term <- ""
-            if( ! is.numeric(model[[l]]) ){
-                term <- names(model)[[l]]
-                if( is.null((freq <- model[[l]]$gfreq)))
+            if( ! is.numeric(tree[[l]]) ){
+                term <- names(tree)[[l]]
+                if( is.null((freq <- tree[[l]]$gfreq)))
                     freq <- 1
             } 
             for( t in seq_along(freqSort) ) {
@@ -26,19 +26,19 @@ nGramModel.predict <- function(model, pGram = list("")) {
             }
         }
         return( termSort[1:5] )
-    } else if ( pGram[[1]] %in% names(model) ) {
+    } else if ( pGram[[1]] %in% names(tree) ) {
         pterm <- pGram[[1]]
         
-        return( nGramModel.predict(model[[pterm]], pGram[-1]) )
+        return( nGramTree.predict(tree[[pterm]], pGram[-1]) )
     } else {
-        return( nGramModel.predict(model, pGram[-1]) ) 
+        return( nGramTree.predict(tree, pGram[-1]) ) 
     }
 }
 
-load(file = "twitterGramModel.RData")
+load(file = "twitterGramTree.RData")
 s <- ""
 prompt <- "Enter an string to predict the next character (q to exit): "
 while( (s <- readline(prompt=prompt)) != "q" ) {
-	print(suppressWarnings(nGramModel.predict(twitter, as.character(s))))
+	print(suppressWarnings(nGramTree.predict(twitter, as.character(s))))
 }
 

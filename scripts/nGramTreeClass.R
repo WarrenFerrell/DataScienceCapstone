@@ -5,15 +5,15 @@ if( !exists('MB') ) {
     lockBinding('MB', globalenv())
 }
 
-nGramModel <- setRefClass('nGramModel',
-    fields = list(model = 'environment', size = 'numeric',
+nGramTree <- setRefClass('nGramTree',
+    fields = list(tree = 'environment', size = 'numeric',
                   maxSize = 'numeric', minFreq = 'numeric',
                   maxGram = 'numeric', timesCleaned = 'numeric'),
     method = list(
-        initialize = function(..., model = new.env(), size = 2E5,
+        initialize = function(..., tree = new.env(), size = 2E5,
                               maxSize = 100 * MB, minFreq = 2,
                  maxGram = 10, timesCleaned = 0) {
-            callSuper(...,model = model, size = size,
+            callSuper(...,tree = tree, size = size,
                       maxSize = maxSize, minFreq = minFreq,
                       maxGram = maxGram, timesCleaned = timesCleaned)
          }#, modSize = function(x) {
@@ -24,6 +24,6 @@ nGramModel <- setRefClass('nGramModel',
         )
 )
 
-setMethod('object.size', 'nGramModel', function(x) (x$size))
+setMethod('object.size', 'nGramTree', function(x) (x$size))
 
-g1 <- nGramModel$new()
+g1 <- nGramTree$new()

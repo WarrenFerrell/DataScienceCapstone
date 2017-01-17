@@ -10,30 +10,30 @@ gramOrder <-  function(gramFreq) { # order by gram length then frequency
     return( gramFreq[order(unlist(gramLength))] )
 }
 
-modelConststr <- function(model, gram, freq) {
+treeConststr <- function(tree, gram, freq) {
     #browser()
     term = gram[[1]]
-    if( !exists(term, where = model) )
-        model[[term]] <- new.env()
+    if( !exists(term, where = tree) )
+        tree[[term]] <- new.env()
 
     if( length(gram) == 1 ) {
-        model[[term]][['gfreq']] <- freq
+        tree[[term]][['gfreq']] <- freq
 
-        return( model )
+        return( tree )
     } else {
-        model[[term]] <- modelConststr(model[[term]], gram[-1], freq)
-        return( model )
+        tree[[term]] <- treeConststr(tree[[term]], gram[-1], freq)
+        return( tree )
     }
 }
 
-nGramModel.create <- function(gramFreq, depth = 12) {
+nGramTree.create <- function(gramFreq, depth = 12) {
     #browser()
-    model <- structure(new.env(), class = 'nGramModel')
+    tree <- structure(new.env(), class = 'nGramTree')
     gramFreq <- gramOrder(gramFreq)
     for( i in seq_along(gramFreq) ) {
         gram <- eval(parse(text = names(gramFreq[i]))) %>% as.character
         freq <- gramFreq[[i]]
-        model  <- modelConststr(model, gram, freq)
+        tree  <- treeConststr(tree, gram, freq)
     }
-    return ( model )
+    return ( tree )
 }

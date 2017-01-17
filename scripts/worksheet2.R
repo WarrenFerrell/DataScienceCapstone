@@ -1,4 +1,4 @@
-#gList <- env2list(grm1mModel)
+#gList <- env2list(grm1mTree)
 
 m1 <- new.env()
 m1[['a']] <- new.env()

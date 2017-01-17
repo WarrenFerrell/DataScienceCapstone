@@ -18,9 +18,8 @@ library(tm); library(ggplot2); library(dplyr); library(compiler); library(pryr)
 library(foreach); library(doParallel); library(microbenchmark); library(fastmatch)
 source(paste0(mainPath, "scripts/cleanLine.R"))
 source(paste0(mainPath, "scripts/proftable.R"))
-cleanLine <- compiler::cmpfun( cleanLine )
 vocabulary = 20000
-xChars = 5E7 # work with subset of data from each set
+xChars = 1E4 # work with subset of data from each set
 trainPath <- paste0(mainPath, 'data/en_US/',xChars,'/')
 scriptPath <- paste0(mainPath, 'scripts/')
 objPath <- paste0(mainPath, 'objects/')
@@ -33,86 +32,72 @@ doParallel::registerDoParallel(cores= 4)
 Using on the top 20000 terms (minimum vocabulary for an adult)
 
 ```{r topTerms, echo = FALSE}
-if ( file.exists("objects/termFreq") ) {
-    load(file = "objects/termFreq")
-} else {
-    if ( file.exists("objects/tdm.trim") ) {
-        load(file = "objects/tdm.trim")
-    } else {
-        source(paste0(mainPath, "scripts/tdm.trim.R"))
-    }
-    termFreq <- as.matrix(slam::rollup(tdm.trim, 2, FUN = sum))
-    termFreq <- termFreq[order(termFreq, decreasing = TRUE), ]
-    save(termFreq, file = "objects/termFreq")
-}
-
+load(file = "objects/termFreq")
 topTerms <- termFreq[1:vocabulary]
 rm(termFreq)
 includedTerms <- c(names(topTerms), "\"", ".", "?", "!", ",",";", ":", "&") # add punctuation to terms to keep
 ```
 
 ## Load Data
-Generate models by traversing each line in file. Use a environment of environments (a hash table) to dramatically reduce the size of the model. Each term has a list
+Generate trees by traversing each line in file. Use a environment of environments (a hash table) to dramatically reduce the size of the tree. Each term has a list
 that points to terms that have been seen following that term. The final term in the
 gram is stored in the list with a frequency variable that is used to rank which
 is the most likely gram during prediction. Because this method doesn't grab the 
 frequency of every single gram (something that requires more memory than a 16GB RAM
-laptop can provide) it sets a maximum allowable memory for the model and then
+laptop can provide) it sets a maximum allowable memory for the tree and then
 trims all all grams that don't meet a set minimum frequency. This method can lose
 low frequency grams with the highest frequency that could be lost being equal to
-the number of times that the model is trimed.
+the number of times that the tree is trimed.
 
 
 ```{r loadData, echo=FALSE}
 minFreq <- 2
 maxGram <- 10
-maxSize <-  1000  # limit of model in MB : memory.limit() - mem_used() 
-source(paste0(scriptPath, 'refs/readRefsToModel.R'))
-source(paste0(scriptPath, 'modelMerge.R'))
-source(paste0(scriptPath, 'nGramModelClass.R'))
+maxSize <-  1000  # limit of tree in MB : memory.limit() - mem_used() 
 objPre <- paste0(objPath, 'refs/inPlace/', xChars, 'Vocab', vocabulary, 'MaxSize', maxSize)
 
-formals(ls)$sorted <- FALSE #slowest part of ls
-mergeModels <- compiler::cmpfun( mergeModels )
-modelConststr <- compiler::cmpfun( modelConststr )
-cleanModel <- compiler::cmpfun( cleanModel )
-inPlaceModel.create <- compiler::cmpfun( inPlaceModel.create )
-readRefData <- compiler::cmpfun( readRefData )
+source(paste0(scriptPath, 'refs/source.R'))
 
-fileName <- paste0(objPre, 'gramModel', 'MinFreq', minFreq)
+formals(ls)$sorted <- FALSE #slowest part of ls
+
+source(paste0(scriptPath, 'refs/compile.R'))
+
+fileName <- paste0(objPre, 'gramTree', 'MinFreq', minFreq)
 if ( cacheObj && file.exists(fileName) ) {
     load(file = fileName)
 } else {
-    # Rprof('read.out')
-    gramModel <- readRefData(trainPath, includedTerms, maxGram, maxSize, minFreq, FALSE)
-    # Rprof(NULL)
-    # summaryRprof('read.out')
-    # proftable('read.out')
-    save(gramModel, file = fileName)
+    Rprof('read.out')
+    
+    gramTree <- readRefData(trainPath, includedTerms, maxGram, maxSize, minFreq, FALSE)
+    
+    Rprof(NULL)
+    summaryRprof('read.out')
+    proftable('read.out')
+    save(gramTree, file = fileName)
 }
 
 ```
 
 ## Predict
-With our generated model we predict some common phrases
+With our generated tree we predict some common phrases
 
 ```{r predictFunction, echo=FALSE}
 source(paste0(scriptPath, 'refs/refPredictInLine.R'))
 source(paste0(scriptPath, 'env2list.R'))
 
-gList <- env2list(gramModel$model)
-gramModel$size / MB
+gList <- env2list(gramTree$tree)
+gramTree$size / MB
 object_size(gList)
-formals(nGramModel.predict)$k <- maxGram
-formals(nGramModel.predict)$commonTerms <- includedTerms
-modelSearch <- compiler::cmpfun( modelSearch )
-nGramModel.predict <- compiler::cmpfun( nGramModel.predict )
+formals(nGramTree.predict)$k <- maxGram
+formals(nGramTree.predict)$commonTerms <- includedTerms
+treeSearch <- compiler::cmpfun( treeSearch )
+nGramTree.predict <- compiler::cmpfun( nGramTree.predict )
 
-nGramModel.predict( gramModel, 'the', maxGram )
-nGramModel.predict( gramModel, 'in', maxGram )
-nGramModel.predict( gramModel, 'of', maxGram )
-nGramModel.predict( gramModel, 'case of', maxGram )
-nGramModel.predict( gramModel, 'a case of', maxGram )
+nGramTree.predict( gramTree, 'the', maxGram )
+nGramTree.predict( gramTree, 'in', maxGram )
+nGramTree.predict( gramTree, 'of', maxGram )
+nGramTree.predict( gramTree, 'case of', maxGram )
+nGramTree.predict( gramTree, 'a case of', maxGram )
 
 ```
 
@@ -134,7 +119,7 @@ quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a
 
 ```{r predict}
 
-#lapply(quiz, function(x) nGramModel.predict( gramModel, x, maxGram ) )
+#lapply(quiz, function(x) nGramTree.predict( gramTree, x, maxGram ) )
 
 
 ```
