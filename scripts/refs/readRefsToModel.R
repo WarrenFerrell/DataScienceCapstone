@@ -57,7 +57,7 @@ inPlaceModel.create <- function(x, wordRefs) {
         }
     }
     x$size <- sizePtr[['*']]
-    if( x$size >  x$maxMem ) {
+    if( x$size >  x$maxSize ) {
         x$size <- cleanModel(x$model, minFreq) * 160
         x$timesCleaned <- x$timesCleaned + 1
     }
@@ -66,14 +66,14 @@ inPlaceModel.create <- function(x, wordRefs) {
 }
 
 
+
 readRefData <- function(filePath, commonTerms,
-                        maxGram=10, maxMem, minFreq,
+                        maxGram=10, maxSize, minFreq,
                         parallel=FALSE) {
 
-    models <- list()
     modelFromFile <- function(fileName) {
         fileCon <- file(fileName, "rt")
-        gramModel <- nGramModel(maxGram = maxGram, maxMem = maxMem * MB,
+        gramModel <- nGramModel$new(maxGram = maxGram, maxSize = maxSize * MB,
                                 minFreq = minFreq)
         while(length(line <- readLines(fileCon, n = 1L, warn=FALSE)) > 0) {
             words <- strsplit(cleanLine(line), " ")[[1]] # split to words / punctuation
@@ -86,26 +86,32 @@ readRefData <- function(filePath, commonTerms,
         return( gramModel )
     }
 
-
-
     file.names <- dir(filePath, full.names = TRUE)
     if( length( file.names ) != 3) {
         source("scripts/writePartitionCaret.R")
         file.names <- dir(filePath, full.names = TRUE)
     }
     model.all <- nGramModel()
+    models <- list()
     for(i in seq_along(file.names)) {
         models[i] <- modelFromFile(file.names[i])
         print(models[i])
-        model.all <- mergeModels(model.all, models[[i]])
+        #model.all <- mergeModels(model.all, models[[i]], TRUE, TRUE)
         #browser()
     }
-
-    formals(foreach)$.combine <- mergeModels
-    formals(foreach)$.packages <- c('fastmatch','pryr')
-    formals(foreach)$.inorder <- FALSE
-    formals(foreach)$.verbose <- TRUE
-
+    # formals(mergeModels)$sideEffects <- TRUE
+    # formals(mergeModels)$removeOld <-  TRUE
+    # setMethod('c', 'nGramModel', function(x, ...) (mergeModels(unlist(x),...)))
+    # formals(foreach)$.combine <- c
+    # formals(foreach)$.init <- model.all
+    #
+    # formals(foreach)$.multicombine <- FALSE
+    # formals(foreach)$.packages <- c('fastmatch')
+    # formals(foreach)$.inorder <- FALSE
+    # formals(foreach)$.verbose <- TRUE
+    # source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/nGramModelClass.R')
+    # print(formals(foreach))
+    # modelFromFile <- compiler::cmpfun( modelFromFile )
     # if( parallel ) {
     #     model.all <- foreach(fileName = file.names) %dopar%  {
     #         modelFromFile(fileName) }
@@ -114,5 +120,6 @@ readRefData <- function(filePath, commonTerms,
     #         modelFromFile(fileName) }
     # }
 
-    return( model.all )
+    return( models )
+
 }

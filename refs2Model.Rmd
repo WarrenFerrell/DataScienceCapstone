@@ -20,7 +20,7 @@ source(paste0(mainPath, "scripts/cleanLine.R"))
 source(paste0(mainPath, "scripts/proftable.R"))
 cleanLine <- compiler::cmpfun( cleanLine )
 vocabulary = 20000
-xChars = 1E4 # work with subset of data from each set
+xChars = 5E7 # work with subset of data from each set
 trainPath <- paste0(mainPath, 'data/en_US/',xChars,'/')
 scriptPath <- paste0(mainPath, 'scripts/')
 objPath <- paste0(mainPath, 'objects/')
@@ -66,29 +66,28 @@ the number of times that the model is trimed.
 ```{r loadData, echo=FALSE}
 minFreq <- 2
 maxGram <- 10
-maxMem <-  100  # limit of model in MB : memory.limit() - mem_used() 
+maxSize <-  1000  # limit of model in MB : memory.limit() - mem_used() 
 source(paste0(scriptPath, 'refs/readRefsToModel.R'))
 source(paste0(scriptPath, 'modelMerge.R'))
 source(paste0(scriptPath, 'nGramModelClass.R'))
-objPre <- paste0(objPath, 'refs/inPlace/', xChars, 'Vocab', vocabulary, 'MaxMem', maxMem)
+objPre <- paste0(objPath, 'refs/inPlace/', xChars, 'Vocab', vocabulary, 'MaxSize', maxSize)
 
 formals(ls)$sorted <- FALSE #slowest part of ls
-# mergeModels <- compiler::cmpfun( mergeModels )
-# modelConststr <- compiler::cmpfun( modelConststr )
-# cleanModel <- compiler::cmpfun( cleanModel )
-# inPlaceModel.create <- compiler::cmpfun( inPlaceModel.create ) 
-# modelFromFile <- compiler::cmpfun( modelFromFile ) 
-# readRefData <- compiler::cmpfun( readRefData )
+mergeModels <- compiler::cmpfun( mergeModels )
+modelConststr <- compiler::cmpfun( modelConststr )
+cleanModel <- compiler::cmpfun( cleanModel )
+inPlaceModel.create <- compiler::cmpfun( inPlaceModel.create )
+readRefData <- compiler::cmpfun( readRefData )
 
 fileName <- paste0(objPre, 'gramModel', 'MinFreq', minFreq)
 if ( cacheObj && file.exists(fileName) ) {
     load(file = fileName)
 } else {
-    Rprof('read.out')
-    gramModel <- readRefData(trainPath, includedTerms, maxGram, maxMem, minFreq, FALSE)
-    Rprof(NULL)
-    summaryRprof('read.out')
-    proftable('read.out')
+    # Rprof('read.out')
+    gramModel <- readRefData(trainPath, includedTerms, maxGram, maxSize, minFreq, FALSE)
+    # Rprof(NULL)
+    # summaryRprof('read.out')
+    # proftable('read.out')
     save(gramModel, file = fileName)
 }
 
@@ -98,12 +97,11 @@ if ( cacheObj && file.exists(fileName) ) {
 With our generated model we predict some common phrases
 
 ```{r predictFunction, echo=FALSE}
-source(paste0(scriptPath, 'nGramModelClass.R'))
-source(paste0(scriptPath, 'refs/refPredict.R'))
+source(paste0(scriptPath, 'refs/refPredictInLine.R'))
 source(paste0(scriptPath, 'env2list.R'))
 
 gList <- env2list(gramModel$model)
-object.size(gramModel)
+gramModel$size / MB
 object_size(gList)
 formals(nGramModel.predict)$k <- maxGram
 formals(nGramModel.predict)$commonTerms <- includedTerms
