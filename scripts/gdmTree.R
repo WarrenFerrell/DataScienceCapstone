@@ -17,7 +17,7 @@ treeConststr <- function(tree, gram, freq) {
         tree[[term]] <- new.env()
 
     if( length(gram) == 1 ) {
-        tree[[term]][['gfreq']] <- freq
+        tree[[term]][['#']] <- freq
 
         return( tree )
     } else {

@@ -14,7 +14,7 @@ mergeTrees <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
             A[[term]] <- if(is.null(A[[term]])) {
                             B[[term]]
                         } else {
-                            if( term == 'gfreq' ) {
+                            if( term == '#' ) {
                                 sizePtr[['*']] <- sizePtr[['*']] - 160
                                 A[[term]] + B[[term]]
 

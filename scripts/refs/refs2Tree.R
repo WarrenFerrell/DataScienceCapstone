@@ -3,13 +3,13 @@ library(foreach); library(methods); library(compiler); library(fastmatch)
 
 #Uses side effects to remove all terms with a frequency less than minFreq
 cleanTree <- function(tree, minFreq) {
-    if( !is.environment(tree) ) { #TRUE = called with 'gfreq' value
+    if( !is.environment(tree) ) { #TRUE = called with '#' value
         return( tree > minFreq ) #calling recursion needs to rm ptr
     } else {
         keep <- FALSE
         for( term in ls(tree) ){
             if(cleanTree(tree[[term]], minFreq)) {
-                keep <- keep + if(term == 'gfreq') 1 else 2.75
+                keep <- keep + if(term == '#') 1 else 2.75
             } else {
                 rm(term, pos = tree)
             }
@@ -21,10 +21,10 @@ cleanTree <- function(tree, minFreq) {
 treeConststr <- function(tree, gram) {
     #browser()
     term <- as.character(gram[[1]])
-    if( is.null(tree[['gfreq']]) )
-        tree[['gfreq']] <- 1
+    if( is.null(tree[['#']]) )
+        tree[['#']] <- 1
     else
-        tree[['gfreq']] <- 1 + tree[['gfreq']]
+        tree[['#']] <- 1 + tree[['#']]
     if( is.null(tree[[term]]) )
         tree[[term]] <-  new.env()
     if( length(gram) > 1 )
@@ -47,7 +47,6 @@ inPlaceTree.create <- function(x, wordRefs) {
 }
 
 
-
 readRefData <- function(filePath, commonTerms,
                         maxGram=10, maxSize, minFreq,
                         parallel=FALSE) {
@@ -64,8 +63,8 @@ readRefData <- function(filePath, commonTerms,
             i <- 1
             while( i < length(wordRefs) ) {
                 k <- i
-                while(!is.na(wordRefs[k]))
-                    k <- k + 1 #find NAs
+                while(!is.na(wordRefs[k])) #find NAs
+                    k <- k + 1
                 if( k > (i + 1) )
                     gramTree <- inPlaceTree.create(gramTree, wordRefs[i:(k-1)])
                 i <- k + 1
@@ -90,7 +89,7 @@ readRefData <- function(filePath, commonTerms,
     #     #browser()
     # }
 
-    formals(mergeTrees)$removeOld <-  TRUE
+    formals(mergeTrees)$sideEffects <-  TRUE
 
     formals(foreach)$.init <- tree.all
     formals(foreach)$.multicombine <- TRUE

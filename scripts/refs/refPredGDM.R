@@ -8,9 +8,9 @@ treeSearch <-  function(tree, pGram, lock = 0) {
     else if( length(pGram) == 0 ) {
         for( term in ls(tree) ) {
             branch = tree[[term]]
-            if(  is.environment(branch) && fmatch("gfreq", ls(branch), nomatch = FALSE) ) {
-                #pred[[term]] <- tree[[i]]$gfreq ^ lock
-                pred[[term]] <- tree[[term]][['gfreq']]
+            if(  is.environment(branch) && fmatch("#", ls(branch), nomatch = FALSE) ) {
+                #pred[[term]] <- tree[[i]]$# ^ lock
+                pred[[term]] <- tree[[term]][['#']]
             }
         }
         return( sort(pred, decreasing = TRUE) )    # return all suggestions

@@ -14,7 +14,7 @@ nGramTree.predict <- function(tree, pGram = list("")) {
             term <- ""
             if( ! is.numeric(tree[[l]]) ){
                 term <- names(tree)[[l]]
-                if( is.null((freq <- tree[[l]]$gfreq)))
+                if( is.null((freq <- tree[[l]]$#)))
                     freq <- 1
             } 
             for( t in seq_along(freqSort) ) {

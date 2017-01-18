@@ -4,9 +4,9 @@ treeConststr <- function(tree, gram, depth = 1, depth.Limit = 10) {
 	
 	term = gram[[1]]
     if( term %in% names(tree) ) 
-		tree[[term]]$gfreq <- tree[[term]]$gfreq + 1 
+		tree[[term]]$# <- tree[[term]]$# + 1 
 	 else 
-		tree[[term]]$gfreq <- 1
+		tree[[term]]$# <- 1
 	tree[[term]] <- treeConststr(tree[[term]], gram[-1], depth + 1, depth.Limit)
 	return( tree )
 } 
@@ -15,11 +15,11 @@ nGramTree.sort <- function(tree) {
 	freq <- vector()
 	if( length(tree) == 1 )
 		return( tree )
-	if( "gfreq" %in% names(tree) )
+	if( "#" %in% names(tree) )
 		freq[[1]] <- Inf
-    for( i in seq.int( 2, to = length(tree)) ) { #first element will always be gfreq
+    for( i in seq.int( 2, to = length(tree)) ) { #first element will always be #
         tree[[i]] <- nGramTree.sort(tree[[i]])
-        freq[[i]] <- tree[[i]]$gfreq
+        freq[[i]] <- tree[[i]]$#
     }
     return( tree[ order(freq, decreasing = TRUE) ] ) 
 }

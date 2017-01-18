@@ -7,8 +7,8 @@ treeSearch <-  function(tree, pGram, lock = 0) {
         for( i in seq_along(tree)) {
 			term <- names(tree)[[i]]
 	
-            if( term != "#" && "gfreq" %in% names(tree[[i]]) ) {
-                #pred[[term]] <- tree[[i]]$gfreq ^ lock
+            if( term != "#" && "#" %in% names(tree[[i]]) ) {
+                #pred[[term]] <- tree[[i]]$# ^ lock
                 pred <- c(pred, term)
             }
         }
