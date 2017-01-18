@@ -8,7 +8,7 @@ output:
 ---
 
 ## About the Data
-
+pulled list of most common english words from https://github.com/first20hours/google-10000-english
 
 
 ```{r setup, include=FALSE}
@@ -27,7 +27,7 @@ objPath <- paste0(mainPath, 'objects/')
 ```
 
 ```{r variables}
-xChars = 1E6 # work with subset of data from each set
+xChars = 1E4 # work with subset of data from each set
 vocabulary = 20000
 cacheObj = FALSE
 minFreq <- 2
@@ -71,15 +71,14 @@ enableJIT(3)
 
 Rprof('treeMake.out')
 
-system.time({gramTree <- readRefData(trainPath, includedTerms, maxGram, maxSize, minFreq, FALSE)})
+system.time({gramTree <- readRefData(trainPath, includedTerms, maxGram, maxSize, xChars, FALSE)})
 
 Rprof(NULL)
 
 #system.time(save(gramTree, file = fileName)) 
 
-
-summaryRprof('read.out')
-proftable('read.out')
+# summaryRprof('treeMake.out')
+# proftable('treeMake.out')
 
 ```
 
@@ -87,12 +86,12 @@ proftable('read.out')
 With our generated tree we predict some common phrases
 
 ```{r predictFunction, echo=FALSE}
-source(paste0(scriptPath, 'refs/refPredRaw.R'))
+
 source(paste0(scriptPath, 'env2list.R'))
 nGramTree.sort <- compiler::cmpfun( nGramTree.sort )
 env2list <- compiler::cmpfun( env2list )
-treeSearch <- compiler::cmpfun( treeSearch )
-nGramTree.predict <- compiler::cmpfun( nGramTree.predict )
+
+
 
 
 fileName <- paste0(objPre, 'gList', 'MinFreq', minFreq) 
@@ -106,21 +105,27 @@ system.time({save(gList, file = fileName)})
 Rprof(NULL)
 object_size(gramTree)
 object_size(gList)
+```
+
+```{r test}
+source(paste0(scriptPath, 'refs/refPredRaw.R'))
 formals(nGramTree.predict)$k <- maxGram
 formals(nGramTree.predict)$commonTerms <- includedTerms
+treeSearch <- compiler::cmpfun( treeSearch )
+nGramTree.predict <- compiler::cmpfun( nGramTree.predict )
 
 
-nGramTree.predict( gramTree, 'the', maxGram )
-nGramTree.predict( gramTree, 'in', maxGram )
-nGramTree.predict( gramTree, 'of', maxGram )
-nGramTree.predict( gramTree, 'case of', maxGram )
-nGramTree.predict( gramTree, 'a case of', maxGram )
+# nGramTree.predict( gramTree, 'the', maxGram )
+# nGramTree.predict( gramTree, 'in', maxGram )
+# nGramTree.predict( gramTree, 'of', maxGram )
+# nGramTree.predict( gramTree, 'case of', maxGram )
+# nGramTree.predict( gramTree, 'a case of', maxGram )
 
 ```
 
 
 ```{r}
-quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of", 
+#quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of", 
     "You're the reason why I smile everyday. Can you follow me please? It would mean the",
     "Hey sunshine, can you follow me and make me the",
     "Very early observations on the Bills game: Offense still struggling but the",
@@ -136,7 +141,7 @@ quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a
 
 ```{r predict}
 
-lapply(quiz, function(x) nGramTree.predict( gramTree, x, maxGram ) )
+#lapply(quiz, function(x) nGramTree.predict( gramTree, x, maxGram ) )
 
 
 ```

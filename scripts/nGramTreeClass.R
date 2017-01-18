@@ -1,4 +1,4 @@
-
+library(methods)
 
 if( !exists('MB') ) {
     MB <- 1048576

@@ -47,9 +47,16 @@ inPlaceTree.create <- function(x, wordRefs) {
 }
 
 
-readRefData <- function(filePath, commonTerms,
-                        maxGram=10, maxSize, minFreq,
+readRefData <- function(filePath, commonTerms, nVocab, cleanFreq,
+                        nTopGrams, maxGram, nCharInput,
                         parallel=FALSE) {
+
+    trees <- list()
+    for(i in seq_along(file.names)) {
+        trees[i] <- nGramTree$new(new.env(), nVocab, cleanFreq, nTopGrams,
+                                  maxGram, nCharInput)
+
+    }
 
     treeFromFile <- function(fileName) {
         fileCon <- file(fileName, "rt")
@@ -81,7 +88,7 @@ readRefData <- function(filePath, commonTerms,
         file.names <- dir(filePath, full.names = TRUE)
     }
     tree.all <- nGramTree()
-    trees <- list()
+
     # for(i in seq_along(file.names)) {
     #     trees[i] <- treeFromFile(file.names[i])
     #     print(trees[i])
@@ -99,7 +106,7 @@ readRefData <- function(filePath, commonTerms,
     #print(formals(foreach))
     treeFromFile <- compiler::cmpfun( treeFromFile )
     if( parallel ) {
-        doParallel::registerDoParallel(cores= 4)
+
         tree.all <- foreach(fileName = file.names, .combine = mergeTrees) %dopar%  {
             treeFromFile(fileName) }
     } else {

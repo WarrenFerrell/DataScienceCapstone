@@ -23,3 +23,64 @@ m2[['c']][['#']] <- 10
 # print(object_size(s1))
 # s1[['b']] <- new.env()
 # print(object_size(s1))
+
+
+# library(foreach)
+# env2listTestforeach <- function(env) {
+#     env2list <- function(env) {
+#         ret <- vector('list')
+#         for( vName in ls(env, sorted = FALSE) ) {
+#             v <- env[[vName]]
+#             if( is.numeric(v) )
+#                 ret[[vName]] <- v
+#             else
+#                 ret[[vName]] <- env2list(v)
+#         }
+#         return( ret )
+#     }
+#     foreach(vName = ls(env, sorted = FALSE),
+#             .combine = c, .inorder = FALSE, .multicombine = TRUE) %dopar% {
+#         ret <- vector('list')
+#         v <- env[[vName]]
+#         if( is.numeric(v) )
+#             ret[[vName]] <- v
+#          else
+#              ret[[vName]] <- env2list(v)
+#         return( ret )
+#     }
+# }
+
+env2list <- function(env) {
+    ret <- vector('list')
+    for( vName in ls(env, sorted = FALSE) ) {
+        v <- env[[vName]]
+        if( is.numeric(v) )
+            ret[[vName]] <- v
+        else
+            ret[[vName]] <- env2list(v)
+    }
+    return( ret )
+}
+
+env2listTest <- function(env) {
+    ret <- vector('list')
+    for( vName in ls(env, sorted = FALSE) ) {
+        v <- env[[vName]]
+        if( is.numeric(v) )
+            ret[[vName]] <- v
+        else
+            ret[[vName]] <- env2listTest(v)
+        rm(v)
+    }
+    return( ret )
+}
+
+
+
+tEnv <- function() { microbenchmark(
+    env2list(gramTree$tree),
+    env2listTest(gramTree$tree), times = 10L
+)
+}
+enableJIT(3)
+print(tEnv()) #is.numeric is faster than is.environment, no faster to initialize list size first (because it takes so long to find the list length
