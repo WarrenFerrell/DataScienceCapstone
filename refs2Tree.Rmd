@@ -9,24 +9,33 @@ output:
 
 ## About the Data
 
+
+
 ```{r setup, include=FALSE}
 #rm(list=ls())
 mainPath <- "C:/Users/warre/Dropbox/GitHub/CAPSTONE/"
 setwd(mainPath)
 knitr::opts_chunk$set(echo = TRUE, include = TRUE, message=FALSE, warning=FALSE)
-library(tm); library(ggplot2); library(dplyr); library(compiler); library(pryr)
+library(tm); library(ggplot2); library(dplyr); library(compiler); library(methods)
 library(foreach); library(doParallel); library(microbenchmark); library(fastmatch)
 source(paste0(mainPath, "scripts/cleanLine.R"))
 source(paste0(mainPath, "scripts/proftable.R"))
-vocabulary = 20000
-xChars = 1E4 # work with subset of data from each set
-trainPath <- paste0(mainPath, 'data/en_US/',xChars,'/')
 scriptPath <- paste0(mainPath, 'scripts/')
 objPath <- paste0(mainPath, 'objects/')
-cacheObj = FALSE
-doParallel::registerDoParallel(cores= 4)
+
+
 
 ```
+
+```{r variables}
+xChars = 1E6 # work with subset of data from each set
+vocabulary = 20000
+cacheObj = FALSE
+minFreq <- 2
+maxGram <- 10
+maxSize <-  1000  # limit of tree in MB : memory.limit() - mem_used() 
+```
+
 
 ##Common Terms
 Using on the top 20000 terms (minimum vocabulary for an adult)
@@ -51,9 +60,7 @@ the number of times that the tree is trimed.
 
 
 ```{r loadData, echo=FALSE}
-minFreq <- 2
-maxGram <- 10
-maxSize <-  1000  # limit of tree in MB : memory.limit() - mem_used() 
+trainPath <- paste0(mainPath, 'data/en_US/',xChars,'/')
 objPre <- paste0(objPath, 'refs/inPlace/', xChars, 'Vocab', vocabulary, 'MaxSize', maxSize)
 
 source(paste0(scriptPath, 'refs/source.R'))
@@ -66,15 +73,17 @@ fileName <- paste0(objPre, 'gramTree', 'MinFreq', minFreq)
 if ( cacheObj && file.exists(fileName) ) {
     load(file = fileName)
 } else {
-    Rprof('read.out')
+    # Rprof('read.out')
     
-    gramTree <- readRefData(trainPath, includedTerms, maxGram, maxSize, minFreq, FALSE)
+    system.time({gramTree <- readRefData(trainPath, includedTerms, maxGram, maxSize, minFreq, FALSE)})
     
-    Rprof(NULL)
-    summaryRprof('read.out')
-    proftable('read.out')
-    save(gramTree, file = fileName)
+    # Rprof(NULL)
+    
+    #system.time(save(gramTree, file = fileName)) #faster and smaller to change to List and then save
 }
+
+# summaryRprof('read.out')
+# proftable('read.out')
 
 ```
 
@@ -82,11 +91,12 @@ if ( cacheObj && file.exists(fileName) ) {
 With our generated tree we predict some common phrases
 
 ```{r predictFunction, echo=FALSE}
-source(paste0(scriptPath, 'refs/refPredictInLine.R'))
+source(paste0(scriptPath, 'refs/refPredRaw.R'))
 source(paste0(scriptPath, 'env2list.R'))
 
-gList <- env2list(gramTree$tree)
-gramTree$size / MB
+system.time({gList <- env2list(gramTree$tree)})
+system.time({save(gList, file = paste0(objPre, 'gList', 'MinFreq', minFreq))})
+object_size(gramTree)
 object_size(gList)
 formals(nGramTree.predict)$k <- maxGram
 formals(nGramTree.predict)$commonTerms <- includedTerms
@@ -119,7 +129,7 @@ quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a
 
 ```{r predict}
 
-#lapply(quiz, function(x) nGramTree.predict( gramTree, x, maxGram ) )
+lapply(quiz, function(x) nGramTree.predict( gramTree, x, maxGram ) )
 
 
 ```

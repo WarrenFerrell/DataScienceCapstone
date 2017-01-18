@@ -1,4 +1,4 @@
-library(foreach); library(pryr); library(compiler); library(fastmatch)
+library(foreach); library(methods); library(compiler); library(fastmatch)
 
 
 #Uses side effects to remove all terms with a frequency less than minFreq
@@ -18,50 +18,31 @@ cleanTree <- function(tree, minFreq) {
     }
 }
 
-treeConststr <- function(tree, gram, sizePtr) {
+treeConststr <- function(tree, gram) {
     #browser()
     term <- as.character(gram[[1]])
-
-    if( is.null(tree[[term]]) ) {
+    if( is.null(tree[['gfreq']]) )
+        tree[['gfreq']] <- 1
+    else
+        tree[['gfreq']] <- 1 + tree[['gfreq']]
+    if( is.null(tree[[term]]) )
         tree[[term]] <-  new.env()
-        sizePtr[['*']] <- sizePtr[['*']] + (160 * 2.75) # need to keep track of tree size
-    }
-    branch <- tree[[term]] #can modify the branch because environments have side effects
-    if( is.null(branch[['gfreq']]) ) {
-        branch[['gfreq']] <- 1
-        sizePtr[['*']] <- sizePtr[['*']] + 160
-    } else {
-        branch[['gfreq']] <- 1 + branch[['gfreq']]
-    }
-
     if( length(gram) > 1 )
-        branch <- treeConststr(branch, gram[-1], sizePtr)
+        tree[[term]] <- treeConststr(tree[[term]], gram[-1])
     return( tree )
 }
 
 #x should be an nGramTree
 inPlaceTree.create <- function(x, wordRefs) {
     #browser()
-    sizePtr <- new.env()
-    sizePtr[['*']] <- x$size
-    for(n in 1:(length(wordRefs)-1)) {
-        if( !is.na(wordRefs[n]) ) { #ignore grams that start with NA
-            gram <- if((length(wordRefs) - n + 1) >= x$maxGram )
-                        wordRefs[n:(n + x$maxGram)]
-                    else
-                        wordRefs[n:length(wordRefs)] #save some chopping computation
-            while(is.na(tail(gram,1)))
-                gram <- gram[-length(gram)] #chop off ending NAs... not optimized
-            x$tree <- treeConststr(x$tree, gram, sizePtr)
-            rm(gram)
-        }
+    NWords <- length(wordRefs)
+    for(n in 1:(NWords-1)) {
+        x$tree <- treeConststr(x$tree, if((length(wordRefs) - n + 1) >= x$maxGram )
+                                    wordRefs[n:(n + x$maxGram)]
+                                else
+                                    wordRefs[n:NWords]
+                               )
     }
-    x$size <- sizePtr[['*']]
-    if( x$size >  x$maxSize ) {
-        x$size <- cleanTree(x$tree, minFreq) * 160
-        x$timesCleaned <- x$timesCleaned + 1
-    }
-    #x$tree <- tree     #not needed due to side effects with environments
     return( x )
 }
 
@@ -79,8 +60,17 @@ readRefData <- function(filePath, commonTerms,
             words <- strsplit(cleanLine(line), " ")[[1]] # split to words / punctuation
             words <- words[ words != "" ]
             wordRefs <- fmatch(words, commonTerms) # get word references
-            if( length(wordRefs) > 1 )
-                gramTree <- inPlaceTree.create(gramTree, wordRefs)
+
+            i <- 1
+            while( i < length(wordRefs) ) {
+                k <- i
+                while(!is.na(wordRefs[k]))
+                    k <- k + 1 #find NAs
+                if( k > (i + 1) )
+                    gramTree <- inPlaceTree.create(gramTree, wordRefs[i:(k-1)])
+                i <- k + 1
+            }
+
         }
         close(fileCon)
         return( gramTree )
@@ -93,33 +83,32 @@ readRefData <- function(filePath, commonTerms,
     }
     tree.all <- nGramTree()
     trees <- list()
-    for(i in seq_along(file.names)) {
-        trees[i] <- treeFromFile(file.names[i])
-        print(trees[i])
-        #tree.all <- mergeTrees(tree.all, trees[[i]], TRUE, TRUE)
-        #browser()
-    }
-    # formals(mergeTrees)$sideEffects <- TRUE
-    # formals(mergeTrees)$removeOld <-  TRUE
-    # setMethod('c', 'nGramTree', function(x, ...) (mergeTrees(unlist(x),...)))
-    # formals(foreach)$.combine <- c
-    # formals(foreach)$.init <- tree.all
-    #
-    # formals(foreach)$.multicombine <- FALSE
-    # formals(foreach)$.packages <- c('fastmatch')
-    # formals(foreach)$.inorder <- FALSE
-    # formals(foreach)$.verbose <- TRUE
-    # source('C:/Users/warre/Dropbox/GitHub/CAPSTONE/scripts/nGramTreeClass.R')
-    # print(formals(foreach))
-    # treeFromFile <- compiler::cmpfun( treeFromFile )
-    # if( parallel ) {
-    #     tree.all <- foreach(fileName = file.names) %dopar%  {
-    #         treeFromFile(fileName) }
-    # } else {
-    #     tree.all <- foreach(fileName = file.names) %do%  {
-    #         treeFromFile(fileName) }
+    # for(i in seq_along(file.names)) {
+    #     trees[i] <- treeFromFile(file.names[i])
+    #     print(trees[i])
+    #     tree.all <- mergeTrees(tree.all, trees[[i]], sideEffects = TRUE, removeOld = FALSE)
+    #     #browser()
     # }
 
+    formals(mergeTrees)$removeOld <-  TRUE
+
+    formals(foreach)$.init <- tree.all
+    formals(foreach)$.multicombine <- TRUE
+    formals(foreach)$.packages <- c('fastmatch')
+    formals(foreach)$.inorder <- FALSE
+    #formals(foreach)$.verbose <- TRUE
+    #print(formals(foreach))
+    treeFromFile <- compiler::cmpfun( treeFromFile )
+    if( parallel ) {
+        doParallel::registerDoParallel(cores= 4)
+        tree.all <- foreach(fileName = file.names, .combine = mergeTrees) %dopar%  {
+            treeFromFile(fileName) }
+    } else {
+        tree.all <- foreach(fileName = file.names, .combine = mergeTrees) %do%  {
+            treeFromFile(fileName) }
+    }
+
+    return( tree.all )
     return( trees )
 
 }

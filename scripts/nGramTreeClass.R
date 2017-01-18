@@ -23,7 +23,7 @@ nGramTree <- setRefClass('nGramTree',
         # }
         )
 )
-
+setMethod('c', 'nGramTree', function(x, ...) (mergeTrees(unlist(x),...)))
 setMethod('object.size', 'nGramTree', function(x) (x$size))
 
 g1 <- nGramTree$new()

@@ -38,8 +38,8 @@ mergeTrees <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
         ret$tree <- mergeRec(ret$tree, args[[i]]$tree , sizePtr)
         ret$timesCleaned <- ret$timesCleaned + args[[i]]$timesCleaned
         ret$size <- sizePtr[['*']]
-        if(removeOld)
-            rm(args[[i]])
+        # if(removeOld)
+        #     rm(names(args)[[i]])
     }
     if( ret$size >  ret$maxSize ) {
         ret$size <- cleanTree(ret$tree, minFreq) * 160
