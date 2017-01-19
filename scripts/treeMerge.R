@@ -7,7 +7,7 @@
 library(pryr);
 
 mergeTrees <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
-    mergeRec <- function(A, B, sizePtr) { # add all of B's terms to A
+    mergeRec <- function(A, B) { # add all of B's terms to A
 
         for( term in ls(B) ) {
             #browser(expr = (term == '1'))
@@ -15,11 +15,8 @@ mergeTrees <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
                             B[[term]]
                         } else {
                             if( term == '#' ) {
-                                sizePtr[['*']] <- sizePtr[['*']] - 160
                                 A[[term]] + B[[term]]
-
                             } else {
-                                sizePtr[['*']] <- sizePtr[['*']] - (160 * 2.75)
                                 mergeRec(A[[term]], B[[term]], sizePtr)
                             }
                         }
@@ -28,23 +25,25 @@ mergeTrees <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
     }
 
     args <- list(...)
-    ret <- if(sideEffects) args[[1]] else args[[1]]$copy()
-    sizePtr <- new.env()
-    mergeRec <- compiler::cmpfun( mergeRec )
+    if( inherits(args[[1]], 'nGramTree') ) {
+        ret <- if(sideEffects) args[[1]] else args[[1]]$copy()
+        for(i in seq(2, length(args))) {
 
-    for(i in seq(2, length(args))) {
-        ret$size <- ret$size + args[[i]]$size
-        sizePtr[['*']] <- ret$size
-        ret$tree <- mergeRec(ret$tree, args[[i]]$tree , sizePtr)
-        ret$timesCleaned <- ret$timesCleaned + args[[i]]$timesCleaned
-        ret$size <- sizePtr[['*']]
-        # if(removeOld)
-        #     rm(names(args)[[i]])
+            ret$tree <- mergeRec(ret$tree, args[[i]]$tree)
+            ret$timesCleaned <- max(ret$timesCleaned, args[[i]]$timesCleaned)
+        }
+    } else {
+        ret <- if(sideEffects) args[[1]] else
+        for(i in seq(sideEffects + 1, length(args))) {
+            ret <- mergeRec(ret, args[[i]])
+
+        }
     }
-    if( ret$size >  ret$maxSize ) {
-        ret$size <- cleanTree(ret$tree, minFreq) * 160
-        ret$timesCleaned <- ret$timesCleaned + 1
-    }
+
+    # if( ret$size >  ret$maxSize ) {
+    #     ret$size <- cleanTree(ret$tree, minFreq) * 160
+    #     ret$timesCleaned <- ret$timesCleaned + 1
+    # }
 
     return(ret)
 }

@@ -6,24 +6,21 @@ if( !exists('MB') ) {
 }
 
 nGramTree <- setRefClass('nGramTree',
-    fields = list(tree = 'environment', size = 'numeric',
-                  maxSize = 'numeric', minFreq = 'numeric',
-                  maxGram = 'numeric', timesCleaned = 'numeric'),
+    fields = list(tree = 'environment', nVocab = 'numeric',
+                  cleanFreq = 'numeric', nTopGrams = 'numeric',
+                  maxGram = 'numeric', timesCleaned = 'numeric',
+                  nCharInput = 'numeric'),
     method = list(
-        initialize = function(..., tree = new.env(), size = 2E5,
-                              maxSize = 100 * MB, minFreq = 2,
+        initialize = function(..., tree = new.env(), nVocab = 2E4,
+                 cleanFreq = 10000, nTopGrams = 10,
                  maxGram = 10, timesCleaned = 0) {
             callSuper(...,tree = tree, size = size,
-                      maxSize = maxSize, minFreq = minFreq,
+                      cleanFreq = cleanFreq, nTopGrams = nTopGrams,
                       maxGram = maxGram, timesCleaned = timesCleaned)
-         }#, modSize = function(x) {
-        #     size[['size']] <<- size[['size']] + x
-        # }, getSize = function() {
-        #     size[['size']]
-        # }
+         }
         )
 )
 #setMethod('c', 'nGramTree', function(x, ...) (mergeTrees(unlist(x),...)))
-setMethod('object.size', 'nGramTree', function(x) (x$size))
+#setMethod('object.size', 'nGramTree', function(x) (x$size))
 
 g1 <- nGramTree$new()

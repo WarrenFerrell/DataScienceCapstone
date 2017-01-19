@@ -24,15 +24,17 @@ source(paste0(mainPath, "scripts/cleanLine.R"))
 source(paste0(mainPath, "scripts/proftable.R"))
 scriptPath <- paste0(mainPath, 'scripts/')
 objPath <- paste0(mainPath, 'objects/')
+doParallel::registerDoParallel(cores= 4)
 ```
 
 ```{r variables}
-xChars = 1E4 # work with subset of data from each set
-vocabulary = 20000
-cacheObj = FALSE
-minFreq <- 2
+cacheObj <-  FALSE
+vocabulary <-  20000
+cleanFreq <- 1000
+nTopGrams <- 10
+#minFreq <- 1
 maxGram <- 10
-maxSize <-  1000  # limit of tree in MB : memory.limit() - mem_used() 
+xChars = 1E7 # work with subset of data from each set
 ```
 
 
@@ -69,11 +71,11 @@ formals(ls)$sorted <- FALSE #slowest part of ls
 #source(paste0(scriptPath, 'refs/compile.R'))
 enableJIT(3)
 
-Rprof('treeMake.out')
+# Rprof('treeMake.out')
 
-system.time({gramTree <- readRefData(trainPath, includedTerms, maxGram, maxSize, xChars, FALSE)})
+system.time({gramTree <- readRefData(trainPath, includedTerms, vocabulary, nTopGrams, maxGram, xChars, FALSE)})
 
-Rprof(NULL)
+# Rprof(NULL)
 
 #system.time(save(gramTree, file = fileName)) 
 
@@ -95,14 +97,14 @@ env2list <- compiler::cmpfun( env2list )
 
 
 fileName <- paste0(objPre, 'gList', 'MinFreq', minFreq) 
-Rprof('listMake.out')
+# Rprof('listMake.out')
 system.time({gList <- env2list(gramTree$tree)}) #faster and smaller to change to List and then save
 system.time({save(gList, file = fileName)})
-Rprof(NULL)
-Rprof('listSort.out')
+# Rprof(NULL)
+# Rprof('listSort.out')
 system.time({gList <- nGramTree.sort(gList)})
 system.time({save(gList, file = fileName)})
-Rprof(NULL)
+# Rprof(NULL)
 object_size(gramTree)
 object_size(gList)
 ```
