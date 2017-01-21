@@ -24,17 +24,16 @@ source(paste0(mainPath, "scripts/cleanLine.R"))
 source(paste0(mainPath, "scripts/proftable.R"))
 scriptPath <- paste0(mainPath, 'scripts/')
 objPath <- paste0(mainPath, 'objects/')
-doParallel::registerDoParallel(cores= 4)
 ```
 
 ```{r variables}
 cacheObj <-  FALSE
 vocabulary <-  20000
-cleanFreq <- 1000
-nTopGrams <- 10
-#minFreq <- 1
+cleanFreq <- 1E5
+nTopGrams <- 500
+minFreq <- 2
 maxGram <- 10
-xChars = 1E7 # work with subset of data from each set
+xChars = 1E6 # work with subset of data from each set
 ```
 
 
@@ -61,26 +60,40 @@ the number of times that the tree is trimed.
 
 
 ```{r loadData, echo=FALSE}
+xChars = 1E4
+cleanFreq <- 1E3
 trainPath <- paste0(mainPath, 'data/en_US/',xChars,'/')
-objPre <- paste0(objPath, 'refs/inPlace/', xChars, 'Vocab', vocabulary, 'MaxSize', maxSize)
+objPre <- paste0(objPath, 'refs/inPlace/', xChars, 'Vocab', vocabulary,
+                 'clnFrq', cleanFreq, 'nTpGrms', nTopGrams,'mxGrm', maxGram)
 
 source(paste0(scriptPath, 'refs/source.R'))
-
-formals(ls)$sorted <- FALSE #slowest part of ls
-
-#source(paste0(scriptPath, 'refs/compile.R'))
 enableJIT(3)
+nTopGrams <- 10
+minFreq <- 2
 
-# Rprof('treeMake.out')
 
-system.time({gramTree <- readRefData(trainPath, includedTerms, vocabulary, nTopGrams, maxGram, xChars, FALSE)})
+topGrams <- function(){ readRefData(trainPath, includedTerms, vocabulary, cleanFreq, NULL,
+                                     nTopGrams, maxGram, xChars, FALSE, FALSE) }
+gramFreq <- function(){ readRefData(trainPath, includedTerms, vocabulary, cleanFreq, minFreq,
+                                     NULL, maxGram, xChars, FALSE, FALSE) }
 
-# Rprof(NULL)
-
-#system.time(save(gramTree, file = fileName)) 
+Rprof('topGrams.out')
+system.time({ gramTreeTop <-  topGrams() }) #faster than foreach package
+Rprof(NULL)
+system.time({gListTop <- env2list(gramTreeTop$tree)})
+system.time({gListTopNamed <- env2Namedlist(gramTreeTop$tree, includedTerms)})
+Rprof('gramFreq.out')
+system.time({ gramTreeFreq <-  gramFreq() })
+Rprof(NULL)
+system.time({gListFreq <- env2list(gramTreeFreq$tree)})
+system.time({gListFreqNamed <- env2Namedlist(gramTreeFreq$tree, includedTerms)})
 
 # summaryRprof('treeMake.out')
-# proftable('treeMake.out')
+summaryRprof('topGrams.out')
+summaryRprof('gramFreq.out')
+proftable('topGrams.out')
+proftable('gramFreq.out')
+microbenchmark(topGrams(), gramFreq(), times = 2)
 
 ```
 
@@ -88,25 +101,20 @@ system.time({gramTree <- readRefData(trainPath, includedTerms, vocabulary, nTopG
 With our generated tree we predict some common phrases
 
 ```{r predictFunction, echo=FALSE}
+# nGramTree.sort <- compiler::cmpfun( nGramTree.sort )
+# env2list <- compiler::cmpfun( env2list )
 
-source(paste0(scriptPath, 'env2list.R'))
-nGramTree.sort <- compiler::cmpfun( nGramTree.sort )
-env2list <- compiler::cmpfun( env2list )
-
-
-
-
-fileName <- paste0(objPre, 'gList', 'MinFreq', minFreq) 
+fileName <- paste0(objPre, 'gList', 'nTpGrms', nTopGrams) 
 # Rprof('listMake.out')
-system.time({gList <- env2list(gramTree$tree)}) #faster and smaller to change to List and then save
+#system.time({gList <- env2list(gramTree$tree)}) #faster and smaller to change to List and then save
 system.time({save(gList, file = fileName)})
 # Rprof(NULL)
 # Rprof('listSort.out')
 system.time({gList <- nGramTree.sort(gList)})
 system.time({save(gList, file = fileName)})
 # Rprof(NULL)
-object_size(gramTree)
-object_size(gList)
+pryr::object_size(gList)
+pryr::object_size(gramTree$tree)
 ```
 
 ```{r test}
@@ -128,7 +136,7 @@ nGramTree.predict <- compiler::cmpfun( nGramTree.predict )
 
 ```{r}
 #quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of", 
-    "You're the reason why I smile everyday. Can you follow me please? It would mean the",
+    "You\'re the reason why I smile everyday. Can you follow me please? It would mean the",
     "Hey sunshine, can you follow me and make me the",
     "Very early observations on the Bills game: Offense still struggling but the",
     "Go on a romantic date at the",
@@ -146,6 +154,15 @@ nGramTree.predict <- compiler::cmpfun( nGramTree.predict )
 #lapply(quiz, function(x) nGramTree.predict( gramTree, x, maxGram ) )
 
 
+```
+
+```{r playingWithParallel, include = FALSE}
+# noFor <- function(){ readRefData(trainPath, includedTerms, vocabulary, cleanFreq,
+#                                      nTopGrams, maxGram, xChars, FALSE, FALSE) }
+# forDo <- function(){ readRefData(trainPath, includedTerms, vocabulary, cleanFreq,
+#                                      nTopGrams, maxGram, xChars, TRUE, FALSE) }
+# forPr <- function(){ readRefData(trainPath, includedTerms, vocabulary, cleanFreq,
+#                                      nTopGrams, maxGram, xChars, TRUE, TRUE) }
 ```
 
 

@@ -6,10 +6,9 @@
 
 library(pryr);
 
-mergeTrees <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
+mergeTrees <- function(..., sideEffects = FALSE, removeOld = FALSE) {
     mergeRec <- function(A, B) { # add all of B's terms to A
-
-        for( term in ls(B) ) {
+        for( term in ls(B, sorted = FALSE) ) {
             #browser(expr = (term == '1'))
             A[[term]] <- if(is.null(A[[term]])) {
                             B[[term]]
@@ -17,7 +16,7 @@ mergeTrees <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
                             if( term == '#' ) {
                                 A[[term]] + B[[term]]
                             } else {
-                                mergeRec(A[[term]], B[[term]], sizePtr)
+                                mergeRec(A[[term]], B[[term]])
                             }
                         }
         }
@@ -28,22 +27,16 @@ mergeTrees <- function( ..., sideEffects = FALSE, removeOld = FALSE) {
     if( inherits(args[[1]], 'nGramTree') ) {
         ret <- if(sideEffects) args[[1]] else args[[1]]$copy()
         for(i in seq(2, length(args))) {
-
+            ret$timesCleaned <- ret$timesCleaned + args[[i]]$timesCleaned
+            ret$termsKept <- ret$termsKept + args[[i]]$termsKept
             ret$tree <- mergeRec(ret$tree, args[[i]]$tree)
-            ret$timesCleaned <- max(ret$timesCleaned, args[[i]]$timesCleaned)
         }
     } else {
-        ret <- if(sideEffects) args[[1]] else
+        ret <- if(sideEffects) args[[1]] else new.env()
         for(i in seq(sideEffects + 1, length(args))) {
             ret <- mergeRec(ret, args[[i]])
 
         }
     }
-
-    # if( ret$size >  ret$maxSize ) {
-    #     ret$size <- cleanTree(ret$tree, minFreq) * 160
-    #     ret$timesCleaned <- ret$timesCleaned + 1
-    # }
-
     return(ret)
 }

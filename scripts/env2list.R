@@ -1,6 +1,6 @@
 nGramTree.sort <- function(tree) {
     len <- length(tree)
-    if( len == 1 )
+    if( len <= 1 )
         return( tree )
     freq <- vector('integer', len)
     for( i in 1:len ) {
@@ -23,6 +23,21 @@ env2list <- function(env, sorted = FALSE) {
             ret[[vName]] <- v
         else
             ret[[vName]] <- env2list(v)
+    }
+    if( sorted )
+        return( nGramTree.sort(ret) )
+    else
+        return( ret )
+}
+
+env2Namedlist <- function(env, terms, sorted = FALSE) {
+    ret <- vector('list')
+    for( vName in ls(env, sorted = FALSE) ) {
+        v <- env[[vName]]
+        if( is.numeric(v) )
+            ret[['#']] <- v
+        else
+            ret[[terms[[as.numeric(vName)]]]] <- env2list(v)
     }
     if( sorted )
         return( nGramTree.sort(ret) )

@@ -82,5 +82,5 @@ tEnv <- function() { microbenchmark(
     env2listTest(gramTree$tree), times = 10L
 )
 }
-enableJIT(3)
-print(tEnv()) #is.numeric is faster than is.environment, no faster to initialize list size first (because it takes so long to find the list length
+#enableJIT(3)
+#print(tEnv()) #is.numeric is faster than is.environment, no faster to initialize list size first (because it takes so long to find the list length
