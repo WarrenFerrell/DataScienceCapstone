@@ -3,43 +3,78 @@ library(foreach); library(methods); library(compiler); library(fastmatch)
 
 #Uses side effects to remove all terms with a frequency less than minFreq
 cleanTreeByFreq <- function(tree, minFreq) {
-    keep <- FALSE
-    if( is.numeric(tree) ) { #TRUE = called with '#' value
-        return( tree < minFreq ) #calling recursion needs to rm ptr
-    } else {
-        for( term in ls(tree, sorted = FALSE) ){
-            if(cleanTreeByFreq(tree[[term]], minFreq)) {
-                keep <- keep + 1
-            } else {
-                rm(term, pos = tree)
+    nRemove <- 0
+    for( term in ls(tree, sorted = FALSE) ){
+        if(term != '#') {
+            nRemove <- nRemove + cleanTreeByFreq(tree[[term]], minFreq)
+            freq <- tree[[term]][['#']]
+            if(!is.null(freq)) {
+                if(freq < minFreq) {
+                    rm('#', pos = tree[[term]])
+                    nRemove <- nRemove + 1
+                }
             }
+            if( length(tree[[term]]) == 0 )
+                rm(term, pos = tree)
         }
     }
-    return( keep )
+    return( nRemove )
 }
 
 cleanTreeByTopGrams <- function(tree, nTopGrams) {
     termList <- ls(tree, sorted = FALSE)
-    nKept <- length(termList)
+    nRemove <- 0
     termFreq <- vector('numeric')
     for( term in termList ){
         if( term != '#' ) {
-            if(!is.null(tree[[term]][['#']]))
-                termFreq[term] <- tree[[term]][['#']]
-            nKept <- nKept + cleanTreeByTopGrams(tree[[term]], nTopGrams)
+            freq <-  tree[[term]][['#']]
+            if(!is.null(freq))
+                termFreq[term] <- freq
+            nRemove <- nRemove + cleanTreeByTopGrams(tree[[term]], nTopGrams)
         }
     }
     termFreq <- sort.int(termFreq, method = 'radix')
     if( length(termFreq) > nTopGrams ) {
         for( term in names(termFreq[(nTopGrams+1):length(termFreq)]) ) {
             rm('#', pos = tree[[term]])
-            nKept <- nKept - 1
-            if( length(ls(tree[[term]], sorted = FALSE)) == 0 )
+            nRemove <- nRemove + 1
+            if( length(tree[[term]]) == 0 ) {
                 rm(term, pos = tree)
-
+            }
         }
     }
-    return( nKept )
+    return( nRemove )
+}
+
+cleanTreeByBoth <- function(tree, minFreq, nTopGrams) {
+
+    termList <- ls(tree, sorted = FALSE)
+    nRemove <- 0
+    termFreq <- vector('numeric')
+    for( term in termList ){
+        if( term != '#' ) {
+            freq <-  tree[[term]][['#']]
+            if(!is.null(freq)){
+                if(freq < minFreq) {
+                    rm('#', pos = tree[[term]])
+                    nRemove <- nRemove + 1
+                } else
+                termFreq[term] <- freq
+            }
+            nRemove <- nRemove + cleanTreeByTopGrams(tree[[term]], nTopGrams)
+        }
+    }
+    termFreq <- sort.int(termFreq, method = 'radix')
+    if( length(termFreq) > nTopGrams ) {
+        for( term in names(termFreq[(nTopGrams+1):length(termFreq)]) ) {
+            rm('#', pos = tree[[term]])
+            nRemove <- nRemove + 1
+            if( length(tree[[term]]) == 0 ) {
+                rm(term, pos = tree)
+            }
+        }
+    }
+    return( nRemove )
 }
 
 treeConststr <- function(tree, gram) {
@@ -80,7 +115,7 @@ readRefData <- function(filePath, commonTerms, nVocab, cleanFreq, minFreq = 1,
     treeFromFile <- function(fileName, gramTree) {
         fileCon <- file(fileName, "rt")
         timesCleaned <- 0
-        termsKept <- 0
+        termsRemoved <- 0
         nBytes <- 0
         while(length(line <- readLines(fileCon, n = 1L, warn=FALSE)) > 0) {
             words <- strsplit(cleanLine(line), " ")[[1]] # split to words / punctuation
@@ -97,13 +132,13 @@ readRefData <- function(filePath, commonTerms, nVocab, cleanFreq, minFreq = 1,
             }
             if( (nBytes <- nBytes + nchar(line)) >= cleanFreq ) {
                 timesCleaned <- timesCleaned + 1
-                termsKept <- termsKept + gramTree$cleanFunc(gramTree$tree, gramTree$cleanLimit)
+                termsRemoved <- termsRemoved + gramTree$cleanFunc(gramTree$tree, gramTree$cleanLimit)
                 nBytes <- 0
             }
         }
         close(fileCon)
         gramTree$timesCleaned <- timesCleaned
-        gramTree$termsKept <- termsKept
+        gramTree$termsRemoved <- termsRemoved
         return( gramTree )
     }
 
@@ -116,10 +151,17 @@ readRefData <- function(filePath, commonTerms, nVocab, cleanFreq, minFreq = 1,
     blankTree <- function() {
         tree <- nGramTree$new(tree = new.env(), nVocab = nVocab, cleanFreq = cleanFreq,
                               maxGram = maxGram, nCharInput =  xChars,
-                              timesCleaned = 0, termsKept = 0)
-        if(is.null(nTopGrams)) {
-            tree$cleanFunc <- cleanTreeByFreq
-            tree$cleanLimit <- minFreq
+                              timesCleaned = 0, termsRemoved = 0)
+        if(!is.null(minFreq)) {
+            if(!is.null(nTopGrams)) {
+                tree$cleanFunc <- function(tree, cleanLimit) {
+                    cleanTreeByBoth(tree, cleanLimit[1], cleanLimit[2])
+                }
+                tree$cleanLimit <- c(minFreq = minFreq, nTopGrams = nTopGrams)
+            } else {
+                tree$cleanFunc <- cleanTreeByFreq
+                tree$cleanLimit <- minFreq
+            }
         } else {
             tree$cleanFunc <- cleanTreeByTopGrams
             tree$cleanLimit <- nTopGrams

@@ -8,7 +8,7 @@ if( !exists('MB') ) {
 nGramTree <- setRefClass('nGramTree',
     fields = list(tree = 'environment', nVocab = 'numeric', cleanFreq = 'numeric',
                   maxGram = 'numeric', nCharInput = 'numeric',
-                  timesCleaned = 'numeric', termsKept = 'numeric',
+                  timesCleaned = 'numeric', termsRemoved = 'numeric',
                   cleanFunc = 'function', cleanLimit = 'numeric')
     # method = list(
     #     initialize = function(tree = new.env(), nVocab = 2E4,

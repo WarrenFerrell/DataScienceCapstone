@@ -28,7 +28,7 @@ mergeTrees <- function(..., sideEffects = FALSE, removeOld = FALSE) {
         ret <- if(sideEffects) args[[1]] else args[[1]]$copy()
         for(i in seq(2, length(args))) {
             ret$timesCleaned <- ret$timesCleaned + args[[i]]$timesCleaned
-            ret$termsKept <- ret$termsKept + args[[i]]$termsKept
+            ret$termsRemoved <- ret$termsRemoved + args[[i]]$termsRemoved
             ret$tree <- mergeRec(ret$tree, args[[i]]$tree)
         }
     } else {
