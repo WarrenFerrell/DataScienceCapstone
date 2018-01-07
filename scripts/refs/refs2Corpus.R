@@ -9,12 +9,6 @@ readRefData <- function(filePath, commonTerms, xChars, parallel = FALSE ) {
         file.names <- dir(filePath, full.names = TRUE)
     }
 
-    cleanLine <- compiler::cmpfun( function(s){
-        s <- gsub("DEL", "", iconv(s, "UTF-8", "ASCII", sub="DEL")) # remove non ASCII characters
-        s <- tolower(s)
-        gsub("([-'a-z]+)" , " \\1 ", s)  # place spaces before and after words
-    } )
-
     cleanFile <- compiler::cmpfun( function(fileName) {
         fileCon <- file(fileName, "rt")
         lines <- list()
@@ -33,7 +27,7 @@ readRefData <- function(filePath, commonTerms, xChars, parallel = FALSE ) {
 	formals(foreach)$.packages <- c('tm','fastmatch')
 	formals(foreach)$.inorder <- FALSE
 	formals(foreach)$.verbose <- TRUE
-	
+
     if( parallel ) {
         corpus.all <- foreach(fileName = file.names) %dopar%  {
             cleanFile(fileName) }

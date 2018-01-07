@@ -1,6 +1,8 @@
-cleanLine <- function(s){
-    s <- gsub("DEL", "", iconv(s, "UTF-8", "ASCII", sub="DEL")) # remove non ASCII characters
+CleanLine <- function(s, inEncoding = "UTF-8", outEncoding = "ASCII")
+{
+    s <- iconv(s, inEncoding, outEncoding, sub="") # remove non ASCII characters
     s <- tolower(s)
-    gsub("([-'a-z]+)" , " \\1 ", s)  # place spaces before and after words
+    s <- gsub(" ?([-'a-z]+) ?" , " \\1 ", s)  # place spaces before and after words
+    s <- gsub("( [ ]+)|(\\x1A)" , " ", s)  #remove whitespace and SUB characters
 }
-cleanLine <- compiler::cmpfun( cleanLine )
+CleanLine <- compiler::cmpfun( CleanLine )

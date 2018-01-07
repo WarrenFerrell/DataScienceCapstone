@@ -30,14 +30,17 @@ env2list <- function(env, sorted = FALSE) {
         return( ret )
 }
 
-env2Namedlist <- function(env, terms, sorted = FALSE) {
+termsVector <- vector('character')
+env2Namedlist <- function(env, sorted = FALSE, terms = NULL) {
+    if(!is.null(terms))
+        termsVector = terms
     ret <- vector('list')
     for( vName in ls(env, sorted = FALSE) ) {
         v <- env[[vName]]
         if( is.numeric(v) )
             ret[['#']] <- v
         else
-            ret[[terms[[as.numeric(vName)]]]] <- env2list(v)
+            ret[[termsVector[[as.numeric(vName)]]]] <- env2Namedlist(v, sorted)
     }
     if( sorted )
         return( nGramTree.sort(ret) )

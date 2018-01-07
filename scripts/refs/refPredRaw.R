@@ -10,7 +10,7 @@ treeSearch <-  function(tree, pGram, lock = 0) {
             branch = tree[[term]]
             if(  term != 'NA' && term != '#' && fmatch("#", ls(branch), nomatch = FALSE) ) {
                 #pred[[term]] <- tree[[i]]$# ^ lock
-                pred[[term]] <- tree[[term]][['#']]
+                pred[[term]] <- tree[[term]][['#']] / tree[['#']]
             }
         }
         return( sort(pred, decreasing = TRUE) )    # return all suggestions

@@ -1,8 +1,9 @@
-library(foreach); library(methods); library(compiler); library(fastmatch)
-
+ library(methods); library(compiler); library(fastmatch)
+source("scripts/ReadLines2.R")
 
 #Uses side effects to remove all terms with a frequency less than minFreq
-cleanTreeByFreq <- function(tree, minFreq) {
+cleanTreeByFreq <- function(tree, minFreq)
+{
     nRemove <- 0
     for( term in ls(tree, sorted = FALSE) ){
         if(term != '#') {
@@ -21,7 +22,8 @@ cleanTreeByFreq <- function(tree, minFreq) {
     return( nRemove )
 }
 
-cleanTreeByTopGrams <- function(tree, nTopGrams) {
+cleanTreeByTopGrams <- function(tree, nTopGrams)
+{
     termList <- ls(tree, sorted = FALSE)
     nRemove <- 0
     termFreq <- vector('numeric')
@@ -46,8 +48,8 @@ cleanTreeByTopGrams <- function(tree, nTopGrams) {
     return( nRemove )
 }
 
-cleanTreeByBoth <- function(tree, minFreq, nTopGrams) {
-
+cleanTreeByBoth <- function(tree, minFreq, nTopGrams)
+{
     termList <- ls(tree, sorted = FALSE)
     nRemove <- 0
     termFreq <- vector('numeric')
@@ -77,7 +79,8 @@ cleanTreeByBoth <- function(tree, minFreq, nTopGrams) {
     return( nRemove )
 }
 
-treeConststr <- function(tree, gram) {
+treeConststr <- function(tree, gram)
+{
     #browser()
     term <- as.character(gram[[1]])
     if( is.null(tree[['#']]) )
@@ -91,111 +94,68 @@ treeConststr <- function(tree, gram) {
     return( tree )
 }
 
-#x should be an nGramTree
-inPlaceTree <- function(x, wordRefs, cleanFreq, nTopGrams, maxGram) {
+inPlaceTree <- function(tree, wordRefs, cleanFreq, nTopGrams, maxGram)
+{
     #browser()
     NWords <- length(wordRefs)
     for(n in 1:(NWords-1)) {
-        x <- treeConststr(x, if((length(wordRefs) - n + 1) >= maxGram )
+        tree <- treeConststr(tree, if((length(wordRefs) - n + 1) >= maxGram )
                                     wordRefs[n:(n + maxGram)]
                                 else
                                     wordRefs[n:NWords]
                                )
     }
-    return( x )
+    return( tree )
 }
 
 
-readRefData <- function(filePath, commonTerms, nVocab, cleanFreq, minFreq = 1,
-                        nTopGrams = NULL, maxGram, xChars,
-                        foreach = FALSE, parallel=FALSE) {
-    inPlaceTree.close <- function(x, wordRefs) { #create closure (for parallel and visibility)
-        inPlaceTree(x, wordRefs, cleanFreq, nTopGrams, maxGram)
-    }
-    treeFromFile <- function(fileName, gramTree) {
-        fileCon <- file(fileName, "rt")
-        timesCleaned <- 0
-        termsRemoved <- 0
-        nBytes <- 0
-        while(length(line <- readLines(fileCon, n = 1L, warn=FALSE)) > 0) {
-            words <- strsplit(cleanLine(line), " ")[[1]] # split to words / punctuation
-            words <- words[ words != "" ]
-            wordRefs <- fmatch(words, commonTerms) # get word references
-            i <- 1
-            while( i < length(wordRefs) ) {
-                k <- i
-                while(!is.na(wordRefs[k])) #find NAs
-                    k <- k + 1
-                if( k > (i + 1) )
-                    gramTree$tree <- inPlaceTree.close(gramTree$tree, wordRefs[i:(k-1)])
-                i <- k + 1
-            }
-            if( (nBytes <- nBytes + nchar(line)) >= cleanFreq ) {
-                timesCleaned <- timesCleaned + 1
-                termsRemoved <- termsRemoved + gramTree$cleanFunc(gramTree$tree, gramTree$cleanLimit)
-                nBytes <- 0
-            }
-        }
-        close(fileCon)
-        gramTree$timesCleaned <- timesCleaned
-        gramTree$termsRemoved <- termsRemoved
-        return( gramTree )
+GetGramsFromFile <- function(inPath, termsToInclude, nPartitionsToUse, gramSizes = 2:3, filepattern = ".*\\.txt")
+{
+    gramsHashSet = hash()
+    GramsFromFileClosure <- function(fileName) {
+        lines = GetLinesFromFile(fileName)
+        grams = lapply(lines, function(line) {
+            line = strsplit(line, " ", fixed = T)[[1]] %>%
+                fmatch(termsToInclude) %>% # match references to a list of included terms
+                na.omit() %>% #remove unused terms
+                ngrams(gramSizes)
+                #as.character() %>%
+                # tm::VectorSource() %>%
+                # tm::VCorpus() %>%
+                # tm::TermDocumentMatrix(x, list(global = list(c(minFreq,Inf))
+            return(line)
+            })
+        return(grams)
     }
 
-    file.names <- dir(filePath, full.names = TRUE)
-    if( length( file.names ) != 3) {
-        source("scripts/writePartitionCaret.R")
-        file.names <- dir(filePath, full.names = TRUE)
-    }
-
-    blankTree <- function() {
-        tree <- nGramTree$new(tree = new.env(), nVocab = nVocab, cleanFreq = cleanFreq,
-                              maxGram = maxGram, nCharInput =  xChars,
-                              timesCleaned = 0, termsRemoved = 0)
-        if(!is.null(minFreq)) {
-            if(!is.null(nTopGrams)) {
-                tree$cleanFunc <- function(tree, cleanLimit) {
-                    cleanTreeByBoth(tree, cleanLimit[1], cleanLimit[2])
-                }
-                tree$cleanLimit <- c(minFreq = minFreq, nTopGrams = nTopGrams)
-            } else {
-                tree$cleanFunc <- cleanTreeByFreq
-                tree$cleanLimit <- minFreq
-            }
-        } else {
-            tree$cleanFunc <- cleanTreeByTopGrams
-            tree$cleanLimit <- nTopGrams
-        }
-        return(tree)
-    }
-    tree.all <- blankTree()
-    mergeTrees.close <- function(...) { mergeTrees(..., sideEffects = TRUE) }
-    foreach.close <- function(...) {
-        foreach(..., .multicombine = TRUE, .inorder = FALSE, .verbose = FALSE,
-                .combine = mergeTrees.close)
-    }
-    if( !foreach ) {
-        trees <- list()
-        for(fName in file.names) {
-            trees[[fName]] <- treeFromFile(fName, blankTree())
-            #print(trees[fName])
-            tree.all <- mergeTrees.close(tree.all, trees[[fName]])
-        }
-    } else {
-        if( parallel ) {
-            tree.all <- foreach.close(fileName = file.names,
-                                      .export = c('cleanLine', 'inPlaceTree', 'treeConststr',
-                                                  'cleanTree', 'treeFromFile', 'blankTree'),
-                                      .packages = c('fastmatch')) %dopar%  {
-
-                                          treeFromFile(fileName, blankTree()) }
-        } else {
-            tree.all <- foreach.close(fileName = file.names) %do%  {
-                treeFromFile(fileName, blankTree()) }
-        }
-    }
-    return( tree.all )
-    #return( trees )
+    btapply(unlist(L), names(unlist(L)), sum)
 
 
+    filePaths = list.files(inPath, filepattern, full.names = TRUE)
+    filesToUse = as.integer(gsub(".*part([0-9]+).*", "\\1", filePaths)) <= nPartitionsToUse
+    filePaths = filePaths[filesToUse]
+    return(lapply(filePaths, GramsFromFileClosure))
 }
+
+#
+# ngram_tokenizer <- Token_Tokenizer(ngram_tokenizer)
+# cntrl <- list(tokenizer = ngram_tokenizer, global = list(c(2,Inf)))
+# gdm <- lapply(corpora, function(x) tm::TermDocumentMatrix(x, cntrl))
+# gramFreq <- lapply(gdm, function(x) as.matrix(slam::rollup(x, 2, FUN = sum)))
+# gramFreq <- lapply(gramFreq, function(x) x[order(x, decreasing = TRUE), ])
+    # for(fName in fileNames) {
+    #     trees[[fName]] <- treeFromFile(fName, blankTree())
+    #     #print(trees[fName])
+    #     fullTree <- mergeTreesClosure(fullTree, trees[[fName]])
+    # }
+    #
+    # if( parallel ) {
+    #     corpus.all <- foreach(fileName = file.names) %dopar%  {
+    #         cleanFile(fileName) }
+    # } else {
+    #     corpus.all <- foreach(fileName = file.names) %do%  {
+    #         cleanFile(fileName) }
+    # }
+
+
+
