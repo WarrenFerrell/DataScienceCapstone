@@ -1,140 +1,56 @@
- library(methods); library(compiler); library(fastmatch)
+ library(methods); library(compiler); library(fastmatch); library(NLP); library(dplyr);
 source("scripts/ReadLines2.R")
+source("scripts/RPointer.R")
 
-#Uses side effects to remove all terms with a frequency less than minFreq
-cleanTreeByFreq <- function(tree, minFreq)
-{
-    nRemove <- 0
-    for( term in ls(tree, sorted = FALSE) ){
-        if(term != '#') {
-            nRemove <- nRemove + cleanTreeByFreq(tree[[term]], minFreq)
-            freq <- tree[[term]][['#']]
-            if(!is.null(freq)) {
-                if(freq < minFreq) {
-                    rm('#', pos = tree[[term]])
-                    nRemove <- nRemove + 1
-                }
-            }
-            if( length(tree[[term]]) == 0 )
-                rm(term, pos = tree)
-        }
-    }
-    return( nRemove )
+
+SplitByNA <- function( x ){ #http://r.789695.n4.nabble.com/Split-a-vector-by-NA-s-is-there-a-better-solution-then-a-loop-td2075110.html
+    idx <- 1 + cumsum( is.na( x ) )
+    not.na <- ! is.na( x )
+    split( x[not.na], idx[not.na] )
 }
 
-cleanTreeByTopGrams <- function(tree, nTopGrams)
-{
-    termList <- ls(tree, sorted = FALSE)
-    nRemove <- 0
-    termFreq <- vector('numeric')
-    for( term in termList ){
-        if( term != '#' ) {
-            freq <-  tree[[term]][['#']]
-            if(!is.null(freq))
-                termFreq[term] <- freq
-            nRemove <- nRemove + cleanTreeByTopGrams(tree[[term]], nTopGrams)
-        }
-    }
-    termFreq <- sort.int(termFreq, method = 'radix')
-    if( length(termFreq) > nTopGrams ) {
-        for( term in names(termFreq[(nTopGrams+1):length(termFreq)]) ) {
-            rm('#', pos = tree[[term]])
-            nRemove <- nRemove + 1
-            if( length(tree[[term]]) == 0 ) {
-                rm(term, pos = tree)
-            }
-        }
-    }
-    return( nRemove )
-}
-
-cleanTreeByBoth <- function(tree, minFreq, nTopGrams)
-{
-    termList <- ls(tree, sorted = FALSE)
-    nRemove <- 0
-    termFreq <- vector('numeric')
-    for( term in termList ){
-        if( term != '#' ) {
-            freq <-  tree[[term]][['#']]
-            if(!is.null(freq)){
-                if(freq < minFreq) {
-                    rm('#', pos = tree[[term]])
-                    nRemove <- nRemove + 1
-                } else
-                termFreq[term] <- freq
-            }
-            nRemove <- nRemove + cleanTreeByTopGrams(tree[[term]], nTopGrams)
-        }
-    }
-    termFreq <- sort.int(termFreq, method = 'radix')
-    if( length(termFreq) > nTopGrams ) {
-        for( term in names(termFreq[(nTopGrams+1):length(termFreq)]) ) {
-            rm('#', pos = tree[[term]])
-            nRemove <- nRemove + 1
-            if( length(tree[[term]]) == 0 ) {
-                rm(term, pos = tree)
-            }
-        }
-    }
-    return( nRemove )
-}
-
-treeConststr <- function(tree, gram)
-{
-    #browser()
-    term <- as.character(gram[[1]])
-    if( is.null(tree[['#']]) )
-        tree[['#']] <- 1
-    else
-        tree[['#']] <- 1 + tree[['#']]
-    if( is.null(tree[[term]]) )
-        tree[[term]] <-  new.env()
-    if( length(gram) > 1 )
-        tree[[term]] <- treeConststr(tree[[term]], gram[-1])
-    return( tree )
-}
-
-inPlaceTree <- function(tree, wordRefs, cleanFreq, nTopGrams, maxGram)
-{
-    #browser()
-    NWords <- length(wordRefs)
-    for(n in 1:(NWords-1)) {
-        tree <- treeConststr(tree, if((length(wordRefs) - n + 1) >= maxGram )
-                                    wordRefs[n:(n + maxGram)]
-                                else
-                                    wordRefs[n:NWords]
-                               )
-    }
-    return( tree )
+GetGramsFromFile <- function(fileName, termsToIncludePtr, gramSizesPtr, returnTermRef = FALSE) {
+    lines = GetLinesFromFile(fileName)
+    grams = lapply(lines, function(line) {
+        rawGrams = strsplit(line, " ", fixed = T)[[1]] %>%
+            fmatch(termsToIncludePtr$value) %>% # match references to a list of included terms
+            SplitByNA() %>%
+            lapply(function(x) { # generate grams as a int vector or the correspoding string ref
+                if(!returnTermRef)
+                    x = termsToIncludePtr$value[x]
+                ngrams(x, gramSizesPtr$value)
+            } )
+        if(length(rawGrams) > 0) #combine lists of grams if any were found (to avoid error from passing empty object to combine
+           rawGrams = combine(rawGrams)
+        rawGrams = vapply(rawGrams, function(x) { # turn grams back to string
+            if(!returnTermRef)
+                paste(x,collapse = ' ')
+            else
+                as.character(x) %>%
+                paste(collapse = ' ')
+            }, "") %>%
+            factor()
+        tapply(rep.int(1,length(rawGrams)), rawGrams, sum)
+     })
+    tapply(unlist(grams), names(unlist(grams)), sum)
+    return(grams)
 }
 
 
-GetGramsFromFile <- function(inPath, termsToInclude, nPartitionsToUse, gramSizes = 2:3, filepattern = ".*\\.txt")
+GetGramsFromTrainingFiles <- function(inPath, termsToInclude, nPartitionsToUse, gramSizes = 2:3, filepattern = ".*\\.txt")
 {
-    gramsHashSet = hash()
-    GramsFromFileClosure <- function(fileName) {
-        lines = GetLinesFromFile(fileName)
-        grams = lapply(lines, function(line) {
-            line = strsplit(line, " ", fixed = T)[[1]] %>%
-                fmatch(termsToInclude) %>% # match references to a list of included terms
-                na.omit() %>% #remove unused terms
-                ngrams(gramSizes)
-                #as.character() %>%
-                # tm::VectorSource() %>%
-                # tm::VCorpus() %>%
-                # tm::TermDocumentMatrix(x, list(global = list(c(minFreq,Inf))
-            return(line)
-            })
-        return(grams)
-    }
-
-    btapply(unlist(L), names(unlist(L)), sum)
-
+    # termsToIncludePtr <- newPointer(termsToInclude)
+    # gramSizesPtr <- newPointer(gramSizes)
+    # # gramsHashSet = hash()
+    # values(h,keys=keys(h2)) <- values(h,keys(h2)) + values(h2)
+    #
 
     filePaths = list.files(inPath, filepattern, full.names = TRUE)
     filesToUse = as.integer(gsub(".*part([0-9]+).*", "\\1", filePaths)) <= nPartitionsToUse
     filePaths = filePaths[filesToUse]
-    return(lapply(filePaths, GramsFromFileClosure))
+
+    grams = lapply(filePaths, GetGramsFromFile, newPointer(termsToInclude), newPointer(gramSizes) )
+    tapply(unlist(grams), names(unlist(grams)), sum)
 }
 
 #
