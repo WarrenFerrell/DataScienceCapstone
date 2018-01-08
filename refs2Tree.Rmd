@@ -32,8 +32,8 @@ cleanFreq = 5E6
 nTopGrams = 5
 minFreq = 10
 maxGram = 3
-nPartitions = 100 # work with subset of data from each set
-nPartitionsToUse = 1
+nPartitions = 1000 
+nPartitionsToUse = 1 # work with subset of data from each set
 trainingDataPath = paste0(cleanDataPath, nPartitions, 'Partitions/')
 ```
 
@@ -69,12 +69,12 @@ sourceLoadData <- function()
 {
     source(paste0(scriptPath, 'WriteASCIIData.R'))
     source(paste0(scriptPath, 'SplitDataIntoPartitions.R'))
+    #WriteASCIIDataDriver("data/en_US/", cleanDataPath)
+    #WriteSubsetDriver(cleanDataPath, trainingDataPath, nPartitions)
     
     source(paste0(scriptPath, 'treeMerge.R'))
     source(paste0(scriptPath, 'nGramTreeClass.R'))
     source(paste0(scriptPath, 'env2list.R'))
-    #WriteASCIIDataDriver("data/en_US/", cleanDataPath)
-    #WriteSubsetDriver(cleanDataPath, paste0(cleanDataPath, nPartitions, "Partitions/"))
 }
 ```
 
@@ -83,14 +83,9 @@ sourceLoadData <- function()
 # objPre <- paste0(objPath, 'refs/inPlace/', nPartitionsToUse,  "PartOf", nPartitions, 'Vocab', nVocabulary, 'clnFrq', cleanFreq, 'mnFrq', minFreq, 'nTpGrms', nTopGrams, 'mxGrm', maxGram)
 
 # readGrams <- function(){ GetGramsFromFile(trainingDataPath, termsToInclude, nPartitionsToUse) }
-#Rprof('topGrams.out')
-source(paste0(scriptPath, 'refs/refs2Tree.R'))
-system.time({ grams <-  GetGramsFromFile(trainingDataPath, termsToInclude, nPartitionsToUse) }) 
+source(paste0(scriptPath, 'GetGramsFromCleanedData.R'))
+system.time({ grams <-  GetGramsFromTrainingFiles(trainingDataPath, termsToInclude, nPartitionsToUse) }) 
 #Rprof(NULL)
-# summaryRprof('topGrams.out')
-# proftable('topGrams.out')
-
-
 
 ```
 
