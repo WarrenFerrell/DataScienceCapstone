@@ -1,4 +1,4 @@
-source("scripts/ReadLines2.R")
+source("scripts/Utilities/ReadLines2.R")
 
 WriteSubset <- function(inName, inFilePath, outPath, nPartitions = 2)
 {

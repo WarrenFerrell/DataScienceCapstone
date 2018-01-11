@@ -1,0 +1,193 @@
+---
+title: "Capstone Milestone Report"
+author: "Warren T Ferrell Jewell"
+date: "January 1, 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## About the Data
+pulled list of most common english words from https://github.com/first20hours/google-10000-english
+
+```{r knitrOpts, include=FALSE}
+compiler::enableJIT(3)  # just in time compiling (compile each function the first time it is run
+compiler::setCompilerOptions(optimize = 3)
+options('max.print' = 50)
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, message=FALSE, warning=FALSE)
+```
+
+```{r setup, include=FALSE}
+#rm(list=ls())
+
+mainPath = "C:/Users/warre/GitHub/CAPSTONE/"
+setwd(mainPath)
+cleanDataPath = "cleanedData/en_us/ASCII/"
+scriptPath = paste0(mainPath, 'Scripts/')
+utilitiesPath = paste0(scriptPath, 'Utilities/')
+objPath = paste0(mainPath, 'SavedObjects/')
+
+cacheObj = TRUE
+nVocabulary =  10000
+cleanFreq = 5E6
+gramSizes = 2:4
+minFreq = 2
+nPartitions = 1000
+nPartitionsToUse = 1 # work with subset of data from each set
+trainingDataPath = paste0(cleanDataPath, nPartitions, 'Partitions/')
+
+
+```
+
+library(tm); library(ggplot2); library(dplyr); library(compiler); library(methods)
+library(foreach); library(doParallel); library(microbenchmark); library(fastmatch)
+
+##Common Terms
+Using on the top 10000 terms 
+
+```{r topTerms, echo = FALSE}
+termFilePath = 'data/en_US/google-10000-english-usa-no-swears.txt'
+if(!file.exists(paste0(mainPath, termFilePath))) {
+    freqTermURL <- "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt"
+    download.file(freqTermURL, termFilePath)
+}
+source("scripts/Utilities/ReadLines2.R")
+termsToInclude = ReadLines2(termFilePath)[1:nVocabulary]      #, ".", "?", "!") 
+```
+
+```{r CleanData, include=FALSE, echo=FALSE}
+dataCleaningScriptsPath = paste0(scriptPath, 'DataCleaning/')
+#source(paste0(dataCleaningPath, 'WriteASCIIData.R'))
+#WriteASCIIDataDriver("data/en_US/", cleanDataPath)
+# source(paste0(dataCleaningPath, 'SplitDataIntoPartitions.R'))
+# WriteSubsetDriver(cleanDataPath, trainingDataPath, nPartitions)
+```
+
+## Load Grams
+Locate grams by traversing each line in each file. Eliminate the 
+
+
+```{r loadData, echo=FALSE}
+
+# readGrams <- function(){ GetGramsFromFile(trainingDataPath, termsToInclude, nPartitionsToUse) }
+source(paste0(scriptPath, 'GetGramsListFromDataWithoutRepeats.R'))
+source("scripts/Utilities/Proftable.R")
+# Rprof('gramsList.out')
+source(paste0(scriptPath, 'GetGramsListFromData.R'))
+source("scripts/Utilities/Proftable.R")
+Rprof('gramsListWithRepeats.out')
+system.time({ gramsListWithRepeates = GetGramsListFromFilesDriver(trainingDataPath, termsToInclude, nPartitionsToUse, gramSizes, minFreq ) })
+# system.time({ gramsList = GetGramsFromFilesWithoutRepeatsDriver(trainingDataPath, termsToInclude, nPartitionsToUse, gramSizes, minFreq ) }) 
+
+Rprof(NULL)
+summaryRprof('gramsListWithRepeats.out')
+
+# source(paste0(scriptPath, 'WriteGramsToFile.R'))
+# savedGramsPath = paste0(cleanDataPath, 'gramsWithoutRepeats', nPartitions, 'Partitions/')
+# WriteGramsToFileByFreq(gramsList, savedGramsPath, paste0(max(gramSizes),'GramsWithoutRepeats',nPartitionsToUse,'PartsByFrequency.txt'))
+# WriteGramsToFileByFirstGram(gramsList, savedGramsPath, paste0(max(gramSizes),'GramsWithoutRepeats',nPartitionsToUse,'PartsByFirstGram.txt'))
+# gramsList = gramsList[ order(gramsList) ]
+summaryRprof('gramsListWithourRepeats.out')
+
+```
+
+```{r performance}
+#Rprof('lotsOfVariables.out')
+lotsaVariables <- function(x, size){
+    y = c(x, rep('y', size))
+    z = c(y, rep('z', size))
+    a = c(z, rep('a', size))
+    b = c(a, rep('b', size))
+    c = c(b, rep('c', size))
+    c
+}
+oneVariable <- function(x, size){
+    x = c(x, rep('y', size))
+    x = c(x, rep('z', size))
+    x = c(x, rep('a', size))
+    x = c(x, rep('b', size))
+    x = c(x, rep('c', size))
+    x
+}
+size = 1000
+system.time({ replicate(n = 10000, lotsaVariables('x', size))})
+system.time({ replicate(n = 10000, oneVariable('x', size))})
+#Rprof(NULL)
+```
+
+
+## Make Tree
+```{r MakeTree}
+source(paste0(scriptPath, 'MakeGramTree.R'))
+system.time({ gramTree = MakeGramTreeDriver(gramsList) })
+```
+
+
+## Predict
+With our generated tree we predict some common phrases
+
+```{r predictFunction, echo=FALSE}
+source(paste0(scriptPath, 'KGramTreePredict.R'))
+
+lemmasToPredict = list('the', 'in', 'of', 'case of', 'a case of')
+lapply(lemmasToPredict, StupidBackOffPredictDriver, gramTree = gramTree, gramSizes = gramSizes, nResults = 5)
+
+```
+
+
+
+```{r test}
+# source(paste0(scriptPath, 'refs/refPredRaw.R'))
+# formals(nGramTree.predict)$k <- maxGram
+# formals(nGramTree.predict)$commonTerms <- termsToInclude
+# treeSearch <- compiler::cmpfun( treeSearch )
+# nGramTree.predict <- compiler::cmpfun( nGramTree.predict )
+# 
+# 
+# nGramTree.predict( gramTree, 'the', maxGram )[1:5]
+# nGramTree.predict( gramTree, 'in', maxGram )[1:5]
+# nGramTree.predict( gramTree, 'of', maxGram )[1:5]
+# nGramTree.predict( gramTree, 'case of', maxGram )[1:5]
+# nGramTree.predict( gramTree, 'a case of', maxGram )[1:5]
+
+```
+
+
+```{r}
+quiz <- c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of",
+    "You\'re the reason why I smile everyday. Can you follow me please? It would mean the",
+    "Hey sunshine, can you follow me and make me the",
+    "Very early observations on the Bills game: Offense still struggling but the",
+    "Go on a romantic date at the",
+    "Well I'm pretty sure my granny has some old bagpipes in her garage I'll dust them off and be on my",
+    "Ohhhhh #PointBreak is on tomorrow. Love that film and haven't seen it in quite some",
+    "After the ice bucket challenge Louis will push his long wet hair out of his eyes with his little",
+    "Be grateful for the good times and keep the faith during the",
+    "If this isn't the cutest thing you've ever seen, then you must be")
+
+```
+
+
+```{r predict}
+
+lapply(quiz, function(x) nGramTree.predict( gramTree, x, maxGram )[1:5] )
+
+
+```
+
+
+
+## Thoughts
+Need to remove grams that resulted from removing uncommon terms from the dataset. 
+
+
+## references
+https://eight2late.wordpress.com/2015/05/27/a-gentle-introduction-to-text-mining-using-r/
+
+http://stackoverflow.com/questions/13614399/how-can-i-use-attr-with-lapply
+
+http://stackoverflow.com/questions/32997201/how-to-store-sparsity-and-maximum-term-length-of-a-term-document-matrix-from-tm
+
+http://www.economist.com/blogs/johnson/2013/05/nVocabulary-size
+
+http://stackoverflow.com/questions/31527345/how-to-add-unequal-length-named-vectors-in-r

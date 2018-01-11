@@ -40,11 +40,11 @@ updatePointerValue.pointer=function(object,newValue){ # create S3 method
     return(NULL)
 }
 
-##### Example
-myP=newPointer(7)
+# ##### Example
+# myP=newPointer(7)
 # print(myP$value) # returns '7'
-newP=copy(myP)
-copyP=myP
-updatePointerValue(myP,9)
+# newP=copy(myP)
+# copyP=myP
+# updatePointerValue(myP,9)
 # print(copyP$value) # returns '9'
 # print(newP$value) # returns '7'

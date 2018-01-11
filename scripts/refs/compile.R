@@ -1,5 +1,0 @@
-mergeTrees <- compiler::cmpfun( mergeTrees )
-treeConststr <- compiler::cmpfun( treeConststr )
-cleanTree <- compiler::cmpfun( cleanTree )
-inPlaceTree.create <- compiler::cmpfun( inPlaceTree.create )
-readRefData <- compiler::cmpfun( readRefData )

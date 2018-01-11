@@ -1,7 +1,7 @@
 library(methods); library(hash); library(fastmatch); library(NLP); library(dplyr);
 library(foreach);
-source("scripts/ReadLines2.R")
-source("scripts/RPointer.R")
+source("scripts/Utilities/ReadLines2.R")
+source("scripts/Utilities/RPointer.R")
 
 
 SplitByNA <- function( x ){ #http://r.789695.n4.nabble.com/Split-a-vector-by-NA-s-is-there-a-better-solution-then-a-loop-td2075110.html
@@ -40,7 +40,7 @@ GetGramsFromFile <- function(fileName, termsToIncludePtr, gramSizesPtr, returnTe
 }
 
 
-GetGramsListFromTrainingFiles <- function(inPath, termsToInclude, nPartitionsToUse, gramSizes = 2:3, filepattern = ".*\\.txt")
+GetGramsListFromFilesDriver <- function(inPath, termsToInclude, nPartitionsToUse, gramSizes = 2:4, minFreq = 2, filepattern = '.*\\.txt')
 {
 
     filePaths = list.files(inPath, filepattern, full.names = TRUE)
@@ -50,23 +50,11 @@ GetGramsListFromTrainingFiles <- function(inPath, termsToInclude, nPartitionsToU
     grams = lapply(filePaths, function(x) {
         GetGramsFromFile(x, newPointer(termsToInclude), newPointer(gramSizes))
     })
-    tapply(unlist(grams), names(unlist(grams)), sum)
-    #tapply(unlist(grams), names(unlist(grams)), sum)
-
+    grams = tapply(unlist(grams), names(unlist(grams)), sum)
+    grams = grams[grams >= minFreq]
+    return(grams)
 }
 
-#
-# ngram_tokenizer <- Token_Tokenizer(ngram_tokenizer)
-# cntrl <- list(tokenizer = ngram_tokenizer, global = list(c(2,Inf)))
-# gdm <- lapply(corpora, function(x) tm::TermDocumentMatrix(x, cntrl))
-# gramFreq <- lapply(gdm, function(x) as.matrix(slam::rollup(x, 2, FUN = sum)))
-# gramFreq <- lapply(gramFreq, function(x) x[order(x, decreasing = TRUE), ])
-# for(fName in fileNames) {
-#     trees[[fName]] <- treeFromFile(fName, blankTree())
-#     #print(trees[fName])
-#     fullTree <- mergeTreesClosure(fullTree, trees[[fName]])
-# }
-#
 # if( parallel ) {
 #     corpus.all <- foreach(fileName = file.names) %dopar%  {
 #         cleanFile(fileName) }
@@ -74,6 +62,3 @@ GetGramsListFromTrainingFiles <- function(inPath, termsToInclude, nPartitionsToU
 #     corpus.all <- foreach(fileName = file.names) %do%  {
 #         cleanFile(fileName) }
 # }
-
-
-
