@@ -1,5 +1,0 @@
-setwd(mainPath)
-source(paste0(scriptPath, 'refs/refs2Tree.R'))
-source(paste0(scriptPath, 'treeMerge.R'))
-source(paste0(scriptPath, 'nGramTreeClass.R'))
-source(paste0(scriptPath, 'env2list.R'))
