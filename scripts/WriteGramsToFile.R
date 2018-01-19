@@ -1,3 +1,5 @@
+source("scripts/Utilities/ReadLines2.R")
+
 
 WriteGramsToFileByFreq <- function(grams , outPath, outName )
 {
@@ -30,4 +32,13 @@ WriteGramsToFileByFirstGram <- function(grams , outPath, outName )
     }, names(grams), grams)
 
     close(outFile)
+}
+
+ReadSavedGramsFromFile <- function( filePath )
+{
+    lines = GetLinesFromFile(filePath)
+    splitOnGram = strsplit(lines, ',')
+    grams = vapply(splitOnGram, `[[`, '', 1)
+    freqs = vapply(splitOnGram, `[[`, '', 2)
+    setNames(freqs, grams)
 }

@@ -27,13 +27,13 @@ scriptPath = paste0(mainPath, 'Scripts/')
 utilitiesPath = paste0(scriptPath, 'Utilities/')
 objPath = paste0(mainPath, 'SavedObjects/')
 
-cacheObj = TRUE
+useCachedObj = TRUE
 nVocabulary =  10000
 cleanFreq = 5E6
 gramSizes = 2:4
 minFreq = 2
-nPartitions = 1000
-nPartitionsToUse = 1 # work with subset of data from each set
+nPartitions = 10
+nPartitionsToUse = 4 # work with subset of data from each set
 trainingDataPath = paste0(cleanDataPath, nPartitions, 'Partitions/')
 
 
@@ -68,51 +68,24 @@ Locate grams by traversing each line in each file. Eliminate the
 
 
 ```{r loadData, echo=FALSE}
+source(paste0(scriptPath, 'WriteGramsToFile.R'))
+savedGramsPath = paste0(cleanDataPath, 'gramsWithoutRepeats', nPartitions, 'Partitions/')
+savedGramsFileName = paste0(max(gramSizes),'GramsWithoutRepeats',nPartitionsToUse,'PartsByFirstGram.txt')
+savedGramsFilePath = paste0(savedGramsPath, savedGramsFileName)
 
-# readGrams <- function(){ GetGramsFromFile(trainingDataPath, termsToInclude, nPartitionsToUse) }
-source(paste0(scriptPath, 'GetGramsListFromDataWithoutRepeats.R'))
-source("scripts/Utilities/Proftable.R")
-# Rprof('gramsList.out')
-source(paste0(scriptPath, 'GetGramsListFromData.R'))
-source("scripts/Utilities/Proftable.R")
-Rprof('gramsListWithRepeats.out')
-system.time({ gramsListWithRepeates = GetGramsListFromFilesDriver(trainingDataPath, termsToInclude, nPartitionsToUse, gramSizes, minFreq ) })
-# system.time({ gramsList = GetGramsFromFilesWithoutRepeatsDriver(trainingDataPath, termsToInclude, nPartitionsToUse, gramSizes, minFreq ) }) 
+if(useCachedObj && !file.exists(savedGramsFilePath)) {
+    source(paste0(scriptPath, 'GetGramsListFromDataWithoutRepeats.R'))
+    system.time({ gramsList = GetGramsFromFilesWithoutRepeatsDriver(trainingDataPath, termsToInclude, nPartitionsToUse, gramSizes, minFreq ) })
+    WriteGramsToFileByFirstGram(gramsList, savedGramsPath, storedGramFileName)
+} else {
+    gramsList = ReadSavedGramsFromFile(savedGramsFilePath)
+}
 
-Rprof(NULL)
-summaryRprof('gramsListWithRepeats.out')
-
-# source(paste0(scriptPath, 'WriteGramsToFile.R'))
-# savedGramsPath = paste0(cleanDataPath, 'gramsWithoutRepeats', nPartitions, 'Partitions/')
-# WriteGramsToFileByFreq(gramsList, savedGramsPath, paste0(max(gramSizes),'GramsWithoutRepeats',nPartitionsToUse,'PartsByFrequency.txt'))
-# WriteGramsToFileByFirstGram(gramsList, savedGramsPath, paste0(max(gramSizes),'GramsWithoutRepeats',nPartitionsToUse,'PartsByFirstGram.txt'))
 # gramsList = gramsList[ order(gramsList) ]
-summaryRprof('gramsListWithourRepeats.out')
-
 ```
 
 ```{r performance}
-#Rprof('lotsOfVariables.out')
-lotsaVariables <- function(x, size){
-    y = c(x, rep('y', size))
-    z = c(y, rep('z', size))
-    a = c(z, rep('a', size))
-    b = c(a, rep('b', size))
-    c = c(b, rep('c', size))
-    c
-}
-oneVariable <- function(x, size){
-    x = c(x, rep('y', size))
-    x = c(x, rep('z', size))
-    x = c(x, rep('a', size))
-    x = c(x, rep('b', size))
-    x = c(x, rep('c', size))
-    x
-}
-size = 1000
-system.time({ replicate(n = 10000, lotsaVariables('x', size))})
-system.time({ replicate(n = 10000, oneVariable('x', size))})
-#Rprof(NULL)
+
 ```
 
 
@@ -129,7 +102,7 @@ With our generated tree we predict some common phrases
 ```{r predictFunction, echo=FALSE}
 source(paste0(scriptPath, 'KGramTreePredict.R'))
 
-lemmasToPredict = list('the', 'in', 'of', 'case of', 'a case of')
+lemmasToPredict = list('the', 'in', 'a', 'of', 'a case', 'case of', 'a case of')
 lapply(lemmasToPredict, StupidBackOffPredictDriver, gramTree = gramTree, gramSizes = gramSizes, nResults = 5)
 
 ```
@@ -137,18 +110,7 @@ lapply(lemmasToPredict, StupidBackOffPredictDriver, gramTree = gramTree, gramSiz
 
 
 ```{r test}
-# source(paste0(scriptPath, 'refs/refPredRaw.R'))
-# formals(nGramTree.predict)$k <- maxGram
-# formals(nGramTree.predict)$commonTerms <- termsToInclude
-# treeSearch <- compiler::cmpfun( treeSearch )
-# nGramTree.predict <- compiler::cmpfun( nGramTree.predict )
-# 
-# 
-# nGramTree.predict( gramTree, 'the', maxGram )[1:5]
-# nGramTree.predict( gramTree, 'in', maxGram )[1:5]
-# nGramTree.predict( gramTree, 'of', maxGram )[1:5]
-# nGramTree.predict( gramTree, 'case of', maxGram )[1:5]
-# nGramTree.predict( gramTree, 'a case of', maxGram )[1:5]
+
 
 ```
 
